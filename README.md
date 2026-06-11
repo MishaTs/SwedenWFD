@@ -3,7 +3,7 @@
 Public GitHub repository for downloading Swedish freshwater aquatic plant and water chemistry data, combining them into a single dataset, and performing analysis. Companion script to manuscript under review.
 
 Main files are
-* `1-s2.0-S0304377019300300-mmc2.xlsx`: List from [Murphy et al., 2019](https://doi.org/10.1016/j.aquabot.2019.06.006) listing main vascular plants considered as "aquatic". Downloaded from [supplementary material](https://ars.els-cdn.com/content/image/1-s2.0-S0304377019300300-mmc2.xlsx).
+* `1-s2.0-S0304377019300300-mmc2.xlsx`: List from [Murphy et al., 2019](https://doi.org/10.1016/j.aquabot.2019.06.006) of main vascular plants considered as "aquatic". Downloaded from [supplementary material](https://ars.els-cdn.com/content/image/1-s2.0-S0304377019300300-mmc2.xlsx).
 * `seChemAPI.R`: Raw companion chemistry download and cleaning into long format.
 * `seDataCombine.R`: Combining chemistry and plant data together into a single wide dataset.
     * Run after `seChemAPI.R` and `seMacroAPI.R`.
