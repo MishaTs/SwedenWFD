@@ -1,0 +1,13 @@
+# R hidden files
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# other file types
+*.zip
+*.jpeg
+
+# Apple folder formatting
+**/.DS_Store
