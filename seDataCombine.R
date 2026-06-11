@@ -2,8 +2,8 @@
 library(tidyverse)
 library(readxl)
 
+# set the working directory to the main R project directory
 setwd(here::here())
-setwd("dataTS/lake/Sweden")
 
 # import from API downloads
 seSpecImp <- read_csv("seCommSpat.csv")
@@ -183,6 +183,8 @@ seSpecFin <- seSpecProc %>%
 # our final dataset:
 seFin <- full_join(seSpecFin, seChemFin,
                    by = c("samplingSiteId", "samplingYr"))
+# save dataset
+write_csv(seFin, "seFin.csv")
 
 ########################### descriptive plotting ###########################
 library(sf)

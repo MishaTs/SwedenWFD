@@ -8,10 +8,12 @@ library(viridis)
 library(sf)
 library(ggpattern)
 
+# set the working directory to the main R project directory
 setwd(here::here())
-setwd("dataTS/lake/Sweden/MacrophyteCFGLMM")
 
 ########################### correlation plot ###########################
+seFin <- read_csv("seFin.csv")
+
 corrPlot <- ggcorrplot(cor(seFin %>% 
                  select(c("samplingYr",
                           "samplingM",

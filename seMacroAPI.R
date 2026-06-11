@@ -1,10 +1,11 @@
+########################### preparation ###########################
 library(tidyverse)
 library(httr)
 library(jsonlite)
 library(stringr)
 
+# set the working directory to the main R project directory
 setwd(here::here())
-setwd("dataTS/both/Sweden")
 
 # replace the string with the API key
 apiKey <- "api_key_here"

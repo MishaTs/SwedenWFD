@@ -1,10 +1,11 @@
+########################### preparation ###########################
 library(tidyverse)
 library(httr)
 library(jsonlite)
 library(stringr)
 
+# set the working directory to the main R project directory
 setwd(here::here())
-setwd("dataTS/lake/Sweden")
 
 ################################ Chem API Call ################################
 # docs https://miljodata.slu.se/api/docs/index.html
