@@ -7,7 +7,7 @@ library(stringr)
 # set the working directory to the main R project directory
 setwd(here::here())
 
-################################ Chem API Call ################################
+########################### API download ###########################
 # docs https://miljodata.slu.se/api/docs/index.html
 
 # replace the string with the API key
@@ -109,7 +109,7 @@ for(i in dbMacroMeta$stationId){ # use stationID bc nationalStationID has NAs
 # save to avoid re-downloading later
 write_rds(fullChemRaw, "seChemRawAPI.rds")
 
-################################ Chem Cleaning ################################
+########################### unpack data ###########################
 # read-in again for restarting the script here
 fullChemRaw <- read_rds("seChemRawAPI.rds")
 View(fullChemRaw)
@@ -188,9 +188,7 @@ wqDuplicates <- wqDict %>% filter(propertyCode %in% wqDups$propertyCode) %>% arr
 #write_csv(wqDuplicates, "SwedenChemistryDuplicates.csv")
 
 
-
-
-# harmonise units 
+########################### trim data and clean up units #######################
 # https://miljodata.slu.se/mvm/DataContents/UnitConversion
 # download dictionary as csv from ^
 # make manual changes to give an acutal dictionary with no duplicated units
@@ -354,6 +352,7 @@ fullChemUnits2 <- fullChemUnits2 %>%
          propertyName = replace_when(propertyName, 
                                      propertyAbbrevName == "Alk/Acid" ~ "Alkalinitet"))
 
+########################### final aggregation & checks #########################
 # now average values at the same depths
 chemDepth <- fullChemUnits2 %>% 
   group_by(samplingSiteId, samplingDate, samplingSiteName,

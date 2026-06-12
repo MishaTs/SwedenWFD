@@ -7,6 +7,7 @@ library(stringr)
 # set the working directory to the main R project directory
 setwd(here::here())
 
+########################### API download ###########################
 # replace the string with the API key
 apiKey <- "api_key_here"
 
@@ -26,6 +27,8 @@ macroRaw <- listMacro$samples
 
 # save temporarily
 #write_rds(macroRaw, "seMacroRawAPI.rds")
+
+########################### unpack and trim down data ##########################
 #macroRaw <- read_rds("seMacroRawAPI.rds")
 
 # remove fully NA columns
@@ -333,18 +336,12 @@ macroRaw11 <- macroRaw11 %>% rowwise() %>%
 macroRaw11 <- macroRaw11 %>% select(-c(inorgSubstrate1, inorgSubstrate3))
 
 
-# helper import if starting the script from halfway; comment out otherwise
-macroRaw7 <- read_rds("seMacroRawAPIOld.rds")
+########################### taxa cleaning ###########################
+# helper import if starting the script from halfway, uncomment if needed
+#macroRaw7 <- read_rds("seMacroRawAPIOld.rds")
 
 extraCol <- colnames(macroRaw11)[!(colnames(macroRaw11) %in% colnames(macroRaw7))]
 baseCol <- colnames(macroRaw11)[(colnames(macroRaw11) %in% colnames(macroRaw7))]
-
-
-
-
-
-
-
 
 # hard decisions to get this into wide format with species
 # first, we need to clean the species though
@@ -501,15 +498,7 @@ macroSpecClean <- macroSpec %>% select(propertyName, taxaClean7) %>%
 # then merge with the original data
 macroRaw11 <- left_join(macroRaw11, macroSpecClean, by = "propertyName")
 
-
-
-
-
-
-
-
-
-
+########################### make data wide & clean covariates ##################
 # concatenate: qualityCode
 # sum: value, analysisDate
 # min/max: waterDepth, coordinates (hopefully CRS is consistent)
@@ -559,15 +548,6 @@ macroRaw12 <- macroRaw12 %>% rowwise() %>%
                                     ifelse(inorgSubstrateMean > inorgSubstrateMed,
                                            ceiling(inorgSubstrateMed),
                                            floor(inorgSubstrateMed))))
-
-
-
-# something is clearly wrong when the max value exceeds the max observationCount
-#summary(macroRaw12)
-# makes me question if value is a reliable measure of abundance
-# but also, 
-#View(macroRaw12 %>% filter(value > 1))
-
 
 # remove qualityCode
 # sampling strategies code as binary rather than sum
@@ -676,6 +656,7 @@ macroRaw14 <- macroRaw13 %>%
   select(-c("nationalStationId", "nationalSiteId")) %>% 
   ungroup()
 
+########################### handle spatial uniqueness ##########################
 # understand the process of duplicates 
 tempSum <- macroRaw14 %>% 
   summarise(.by = siteIdUnique,
