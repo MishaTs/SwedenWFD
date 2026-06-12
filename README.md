@@ -16,12 +16,12 @@ Main files are
 All data came from the Swedish environmental data service [Miljödata MVM](https://miljodata.slu.se/MVM/). Users can download data either through the search portal or through API. The [search portal](https://miljodata.slu.se/MVM/Search) provides csv files adhering to user-specified conditions (e.g., specific data products, time ranges, geographic locations, and survey type filters). In addition to diminished replicability, this option provides data at only the lake (i.e., station) level and excludes certain covariates (e.g., abundance, sampling methods, inorganic substrate, survey depth, and transect ID). Downloads cannot exceed 1 000 000 data points per query, which is especially limiting for water chemistry time series.
 
 ![figure1](imgREADME/Figure1.png)
-Figure 1: Online Miljödata MVM open access portal for direct data download to csv file, with a demonstration of Macrophyte product filters and spatiotemporal coverage options and visualisation. 
+_Figure 1: Online Miljödata MVM open access portal for direct data download to csv file, with a demonstration of Macrophyte product filters and spatiotemporal coverage options and visualisation._
 
 Data at the site level need to be downloaded via API. The process starts with account registration using the [SLU portal](https://useradmin.slu.se/skapa-konto). After login, the website automatically redirects to the ["My Pages" portal](https://miljodata.slu.se/MVM/User/MyPages). Here, clicking on "Aktivera och visa publika tickets" shows an API key under "Ticketdata" that can be directly pasted into our data download scripts.
 
 ![figure2](imgREADME/Figure2.png)
-Figure 2: Example Miljödata MVM account portal for registered users, with censored fields for private information. Users request public tokens for API access (i.e., not personal tokens but shared among all users) through the lower "Access tickets" section.
+_Figure 2: Example Miljödata MVM account portal for registered users, with censored fields for private information. Users request public tokens for API access (i.e., not personal tokens but shared among all users) through the lower "Access tickets" section._
 
 With the API key, we first downloaded macrophyte data using the `seMacroAPI.R`. Then, we cleaned to a tidy dataframe format where each row is a sampling site surveyed at one timepoint. Several processing steps helped to make the data more suitable for analysis:
 1.	Remove columns on internal data quality from Swedish databases;
