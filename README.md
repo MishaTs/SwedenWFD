@@ -4,14 +4,17 @@ Public GitHub repository for downloading Swedish freshwater aquatic plant and wa
 
 Main files are
 * `1-s2.0-S0304377019300300-mmc2.xlsx`: List from [Murphy et al., 2019](https://doi.org/10.1016/j.aquabot.2019.06.006) of main vascular plants considered as "aquatic". Downloaded from [supplementary material](https://ars.els-cdn.com/content/image/1-s2.0-S0304377019300300-mmc2.xlsx).
+* `Miljödata MVM - Administrera kontrollhalter.csv`: [Manual download of the official documentation](https://miljodata.slu.se/mvm/DataContents/UnitConversion) for chemistry variable units and conversion factors.
 * `seChemAPI.R`: Raw companion chemistry download and cleaning into long format.
+    * Requires `Miljödata MVM - Administrera kontrollhalter.csv` for units.
 * `seDataCombine.R`: Combining chemistry and plant data together into a single wide dataset.
     * Run after `seChemAPI.R` and `seMacroAPI.R`.
+    * Requires `1-s2.0-S0304377019300300-mmc2.xlsx` for diversity calculation.
 * `seMacroAPI.R`: Raw plant data download and cleaning into wide format.
 * `seSpatialModels.R`: Running several [`spCF`](https://cran.r-project.org/package=spCF) models for spatial analysis on the data.
     * Run after `seDataCombine.R`.
 
-# Simple Text Description
+# Text Description
 
 All data came from the Swedish environmental data service [Miljödata MVM](https://miljodata.slu.se/MVM/). Users can download data either through the search portal or through API. The [search portal](https://miljodata.slu.se/MVM/Search) provides csv files adhering to user-specified conditions (e.g., specific data products, time ranges, geographic locations, and survey type filters). In addition to diminished replicability, this option provides data at only the lake (i.e., station) level and excludes certain covariates (e.g., abundance, sampling methods, inorganic substrate, survey depth, and transect ID). Downloads cannot exceed 1 000 000 data points per query, which is especially limiting for water chemistry time series.
 
@@ -23,7 +26,7 @@ Data at the site level need to be downloaded via API. The process starts with ac
 ![figure2](imgREADME/Figure2.png)
 _Figure 2: Example Miljödata MVM account portal for registered users, with censored fields for private information. Users request public tokens for API access (i.e., not personal tokens but shared among all users) through the lower "Access tickets" section._
 
-With the API key, we first downloaded macrophyte data using the `seMacroAPI.R`. Then, we cleaned to a tidy dataframe format where each row is a sampling site surveyed at one timepoint. Several processing steps helped to make the data more suitable for analysis:
+With the API key, we first downloaded macrophyte data using `seMacroAPI.R`. Then, we cleaned to a tidy dataframe format where each row is a sampling site surveyed at one timepoint. Several processing steps helped to make the data more suitable for analysis:
 1.	Remove columns on internal data quality from Swedish databases;
 2.	Translate column names to English;
 3.	Retain only the minimum and maximum transect start and end coordinates;
@@ -39,18 +42,18 @@ Then, we repeated a similar process for the water chemistry data in `seChemAPI.R
 2.	Choose 36 common macroecological variables (i.e., no pollution measures);
 3.	Set values below the detection limit to half (50%) of the limit;
 4.	Set values over the detection limit to 10% over the limit;
-5.	Harmonise different units using a [manual download of the official documentation](https://miljodata.slu.se/mvm/DataContents/UnitConversion);
+5.	Harmonise different units using `Miljödata MVM - Administrera kontrollhalter.csv`;
 6.	Remove most quality and sampling covariates to avoid confusion with ecological data; and
 7.	Select only the value from the shallowest recorded depth to improve comparability with other datasets [(García-Girón et al., 2020)](https://doi.org/10.1002%2Flno.11559).
 
 Finally, we combined these macrophyte community and water chemistry downloads into a single dataset where each row was the macrophyte richness and corresponding chemistry data at one site in one year for analysis in `seDataCombine.R`. This warranted a few additional assumptions:
 1.	Select only chemistry values during the May-September macrophyte survey season, and take a weighted average preferring data during summer months (i.e., June-August);
 2.	Remove chemistry variables with more than 25% missing values; and
-3.	Further calculate vascular macrophyte species richness from a seminal list for comparison [(Murphy et al., 2019)](https://doi.org/10.1016/j.aquabot.2019.06.006).
+3.	Further calculate vascular macrophyte species richness using `1-s2.0-S0304377019300300-mmc2.xlsx`.
 
 From this, we obtained 425 Swedish WFD sampling sites between 2007 and 2024 with recorded macrophyte richness, of which 202 have at least one water quality variable. Only lakes had available macrophyte community data, excluding lotic systems with water quality data. Our data included multiple observations for every year of surveying, spatially distributed across the entirety of Sweden but with varying granularity depending on the geographic area (e.g., many sites concentrated around Stockholm).
 
-# Session Information
+# Session Info
 
 Code was most recently run in the below environment.
 ```
