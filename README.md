@@ -14,9 +14,9 @@ Main files are
 * `seSpatialModels.R`: Running several [`spCF`](https://cran.r-project.org/package=spCF) models for spatial analysis on the data.
     * Run after `seDataCombine.R`.
 
-# Text Description
+# Text Summary
 
-All data came from the Swedish environmental data service [Miljödata MVM](https://miljodata.slu.se/MVM/). Users can download data either through the search portal or through API. The [search portal](https://miljodata.slu.se/MVM/Search) provides csv files adhering to user-specified conditions (e.g., specific data products, time ranges, geographic locations, and survey type filters). In addition to diminished replicability, this option provides data at only the lake (i.e., station) level and excludes certain covariates (e.g., abundance, sampling methods, inorganic substrate, survey depth, and transect ID). Downloads cannot exceed 1 000 000 data points per query, which is especially limiting for water chemistry time series.
+All data came from the Swedish environmental data service [Miljödata MVM](https://miljodata.slu.se/MVM/). Users can download data either through the search portal or through API. The [search portal](https://miljodata.slu.se/MVM/Search) provides csv files adhering to user-specified conditions (e.g., specific data products, time ranges, geographic locations, and survey type filters). In addition to diminished replicability, this option provides data at only the lake (i.e., station) level and excludes certain covariates (e.g., abundance, sampling methods, inorganic substrate, survey depth, and transect ID). Downloads cannot exceed 1 million data points per query, which is especially limiting for water chemistry time series.
 
 ![figure1](imgREADME/Figure1.png)
 _Figure 1: Online Miljödata MVM open access portal for direct data download to csv file, with a demonstration of Macrophyte product filters and spatiotemporal coverage options and visualisation._
@@ -26,7 +26,7 @@ Data at the site level need to be downloaded via API. The process starts with ac
 ![figure2](imgREADME/Figure2.png)
 _Figure 2: Example Miljödata MVM account portal for registered users, with censored fields for private information. Users request public tokens for API access (i.e., not personal tokens but shared among all users) through the lower "Access tickets" section._
 
-With the API key, we first downloaded macrophyte data using `seMacroAPI.R`. Then, we cleaned to a tidy dataframe format where each row is a sampling site surveyed at one timepoint. Several processing steps helped to make the data more suitable for analysis:
+With the API key, we first downloaded macrophyte data using `seMacroAPI.R`. Then, we cleaned to a tidy dataframe format where each row is a sampling site surveyed at one timepoint. We took several processing steps to make the data more suitable for analysis:
 1.	Remove columns on internal data quality from Swedish databases;
 2.	Translate column names to English;
 3.	Retain only the minimum and maximum transect start and end coordinates;
@@ -51,7 +51,7 @@ Finally, we combined these macrophyte community and water chemistry downloads in
 2.	Remove chemistry variables with more than 25% missing values; and
 3.	Further calculate vascular macrophyte species richness using `1-s2.0-S0304377019300300-mmc2.xlsx`.
 
-From this, we obtained 425 Swedish WFD sampling sites between 2007 and 2024 with recorded macrophyte richness, of which 202 have at least one water quality variable. Only lakes had available macrophyte community data, excluding lotic systems with water quality data. Our data included multiple observations for every year of surveying, spatially distributed across the entirety of Sweden but with varying granularity depending on the geographic area (e.g., many sites concentrated around Stockholm).
+From this, we got 425 Swedish WFD sampling sites between 2007 and 2024 with recorded macrophyte richness, of which 202 had at least one water quality variable. Only lakes had available macrophyte community data, excluding lotic systems with water quality data. The data had multiple observations for every year of surveying, spatially distributed across the entirety of Sweden but with varying granularity depending on the geographic area (e.g., many sites concentrated around Stockholm).
 
 # Session Info
 
