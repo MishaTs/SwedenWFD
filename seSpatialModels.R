@@ -361,16 +361,11 @@ write.csv(cleanSubsetSum,
           "tableS2.csv")
 
 ########################### filter w/ chemistry data ###########################
-
 # re-run with just water sites with water chemistry data
 # method is sensitive to NAs which must be removed
-
-# summarise all NA values again
-View(
-  seFin %>% ungroup() %>% 
-    summarise(across(everything(), ~ sum(is.na(.))))
-)
-# filter only for values not NA in a few values
+# filter only for values not NA in selected variables
+# done manually but these can be found in entry 3 of cleanSubsetSum
+# pH;Temp;TN;TOC;Tot_P;waterDepthMax
 seFinFilt <- seFin %>% drop_na(any_of(c(
   #"secchi",
   #"Abs_F420",
@@ -396,35 +391,34 @@ seFinFilt <- seFin %>% drop_na(any_of(c(
             #"waterDepthMax"
   )) %>% 
   mutate(
-    pHsq = pH^2
-    TPsq = Tot_P^2,
-         Tsq = Temp^2,
-         TNsq = TN^2)
+    pH_sq = pH^2,
+    Temp_sq = Temp^2,
+    TN_sq = TN^2,
+    TOC_sq = TOC^2,
+    Tot_P_sq = Tot_P^2,
+    waterDepthMax_sq = waterDepthMax^2
+  )
 
 # prepare data for package
 coordFilt <- seFinFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
 yFilt <- seFinFilt %>% pull(maxRich)
-# for later test
-#offsetFilt <- seFinFilt %>% pull(observationCount)
 
-
+# fit the null model again
 nullFiltHV <- cf_glm_hv(y = yFilt,
                         coords = coordFilt, 
                         family = poisson()) # poisson and quasipoisson are identical
 nullFilt <- cf_glm(y = yFilt,
                    coords = coordFilt, 
                    mod_hv = nullFiltHV)
-# model when filtering only for all rows with some chem value is horrible
-# best R2 at 85,6% when we have TN, Temp, and TP
-nullFilt
 
+# general inspection
+#nullFilt
 # spatial trends are in
-nullFilt$bands
+#nullFilt$bands
 # covariates are in nullFilt$beta
-nullFilt$beta
+#nullFilt$beta
 # summary statistics in
-nullFilt$e_summary
-
+#nullFilt$e_summary
 
 # basic residuals check
 nullFiltResults <- seFinFilt %>% 
@@ -432,37 +426,34 @@ nullFiltResults <- seFinFilt %>%
     nullFilt$pred$pred, 
     # Predictive SD
     nullFilt$pred$pred_sd) %>% 
-  rename(predRich = `...35`,
-         predSd = `...36`) %>% 
+  rename(predRich = `...40`,
+         predSd = `...41`) %>% 
   mutate(rawResid = maxRich - predRich)
 
 
 # residuals vs fitted
-# clearly some misfit with more extreme underpredictions as predicted richness increases
+# more systematic overprediction than underprediction but nothing else really?
 ggplot(nullFiltResults, aes(x = predRich, y = rawResid)) + geom_point()
-# absolutely lethal misfit for total and just TN data
-# true richness vs residual
+# absolutely lethal misfit where residuals  increase as richness increases
+# this is pretty typical for a misfit model and not uniquely horrible
 ggplot(nullFiltResults, aes(x = maxRich, y = rawResid)) + geom_point()
 
 # temporal sensitivity
-# missing a few years later
+# middle years are especially undersampled but nothing structural
 ggplot(nullFiltResults, aes(x = samplingYr, y = rawResid)) + geom_point()
 
 # spatial sensitivity
 nullFiltSpatial <- st_as_sf(nullFiltResults, 
                             coords = c("samplingSiteX", "samplingSiteY"), 
                             crs = 3006)
-# all majorly concerning residuals situated in eastern Svealand, southern coast, or extreme northwest
+# nothing hugely concerning spatially
+# slightly higher errors in the mountains and around cities but nothing huge
 ggplot() + 
   geom_sf(data = seMap) +
   geom_sf(data = nullFiltSpatial, aes(colour = rawResid)) +
   theme_bw() +
   scale_colour_viridis_c() +
   labs(colour = "Raw residuals")
-
-
-
-
 
 ########################### manual chem model dredge ###########################
 
