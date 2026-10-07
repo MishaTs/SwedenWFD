@@ -240,8 +240,6 @@ ggsave("fig3.jpeg",
        #scale = 1,
        dpi = 300)
 
-
-
 ############### spatial process checks ############### 
 # the goal here is to find the covariates that distort the spatial process the least
 # we evaluate these by 4 metrics: (1) min, (2) max bandwidth
@@ -433,26 +431,29 @@ View(
     summarise(across(everything(), ~ sum(is.na(.))))
 )
 # filter only for values not NA in a few values
-seFinFilt <- seFin %>% drop_na(any_of(c(#"secchi", # missing values here are different from the chem
+seFinFilt <- seFin %>% drop_na(any_of(c(
+  #"secchi",
   #"Abs_F420",
   #"Alk",
   #"Kfyll",
   #"Kond_25",
-  #"TOC",
-  "Tot_P",
+  "pH",
   "Temp",
-  #"pH",
-  "TN"))) %>% 
+  "TN",
+  "TOC",
+  "Tot_P",
+  "waterDepthMax"))) %>% 
   select(-c("secchi",
             "Abs_F420",
             "Alk",
             "Kfyll",
             "Kond_25",
-            "TOC",
+            #"TOC",
             #"Tot_P",
             #"Temp",
-            "pH",
-            #"TN"
+            #"pH",
+            #"TN",
+            #"waterDepthMax"
   )) %>% 
   mutate(TPsq = Tot_P^2,
          Tsq = Temp^2,
@@ -532,10 +533,16 @@ runQuickCF <- function(covList) {
   
   modHV <- cf_glm_hv(y = yFilt, x = xFilt, 
                      coords = coordFilt, 
-                     family = poisson()) # poisson and quasipoisson are identical
+                     # poisson and quasipoisson are identical
+                     family = poisson()) %>% 
+    # silence output
+    suppressMessages()
+  
   modFit <- cf_glm(y = yFilt, x = xFilt, 
                    coords = coordFilt, 
-                   mod_hv = modHV)
+                   mod_hv = modHV) %>% 
+    suppressMessages()
+  
   return(modFit)
 }
 
