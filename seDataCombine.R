@@ -203,7 +203,7 @@ library(sf)
 # edit the model for descriptive plotting
 seFinPlot <- seFin %>% 
   mutate(inFilt = case_when(
-    is.na(Tot_P) + is.na(TN) + is.na(Temp) == 0 ~ 1,
+    is.na(pH) + is.na(Temp) + is.na(TN) + is.na(TOC) + is.na(Tot_P) + is.na(waterDepthMax) == 0 ~ 1,
     .default = 0
   ))
 
