@@ -1,5 +1,7 @@
 ########################### preparation ###########################
 library(tidyverse)
+# new versions of the package work very differently; install the 0.1.1 directly
+# pak::pak("spCF@0.1.1")
 library(spCF)
 library(stringr)
 #library(fastDummies)
@@ -19,22 +21,22 @@ corrPlot <- ggcorrplot(cor(seFin %>%
                           "samplingM",
                           "samplingSiteX",
                           "samplingSiteY",
-                          "rich",
+                          "maxRich",
+                          "murphyRich",
                           "tmiRich",
                           "tmi",
-                          "murphyRich",
-                          "maxRich",
-                          "observationCount")) %>% 
+                          "observationCount",
+                          "waterDepthMax")) %>% 
                    rename(Year = "samplingYr",
                           Month = "samplingM",
                           X = "samplingSiteX",
                           Y = "samplingSiteY",
-                          Richness = "rich",
+                          `Full Richness` = "maxRich",
+                          `Murphy Richness` = "murphyRich",
                           `TMI Richness` = "tmiRich",
                           TMI = "tmi",
-                          `Murphy Richness` = "murphyRich",
-                          `Full Richness` = "maxRich",
-                          Count = "observationCount")),
+                          Count = "observationCount",
+                          `Survey Depth` = "waterDepthMax")),
            type = "upper",
            lab = TRUE,
            digits = 2) +
@@ -53,12 +55,12 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                           "samplingM",
                           "samplingSiteX",
                           "samplingSiteY",
-                          "rich",
+                          "maxRich",
+                          "murphyRich",
                           "tmiRich",
                           "tmi",
-                          "murphyRich",
-                          "maxRich",
                           "observationCount",
+                          "waterDepthMax",
                           "Alk",
                           "Kfyll",
                           "Kond_25",
@@ -69,20 +71,20 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                           "TN")) %>% 
                    relocate(c(samplingM, samplingYr,
                               samplingSiteX, samplingSiteY,
-                              rich, murphyRich, maxRich, tmiRich, tmi,
-                              observationCount,
+                              maxRich, murphyRich, tmiRich, tmi,
+                              observationCount, waterDepthMax,
                               Alk, Kfyll, Kond_25, TOC, pH,
                               Tot_P, Temp, TN)) %>% 
                           rename(Year = "samplingYr",
                                  Month = "samplingM",
                                  X = "samplingSiteX",
                                  Y = "samplingSiteY",
-                                 `WFD Richness` = "rich",
+                                 `Full Richness` = "maxRich",
+                                 `Murphy Richness` = "murphyRich",
                                  `TMI Richness` = "tmiRich",
                                  TMI = "tmi",
-                                 `Murphy Richness` = "murphyRich",
-                                 `Full Richness` = "maxRich",
                                  `# Obs` = "observationCount",
+                                 `Survey Depth` = "waterDepthMax",
                                  Alkalinity = "Alk",
                                  `Chlorophyl-a` = "Kfyll",
                                  Conductivity = "Kond_25",
@@ -120,7 +122,7 @@ x <- seFin %>% select(c(samplingYr)) %>%
   #           remove_first_dummy = TRUE) %>% 
   #select(-samplingYr) %>% 
   as.matrix()
-y <- seFin %>% pull(rich)
+y <- seFin %>% pull(maxRich)
 offset <- seFin %>% pull(observationCount)
 
 # fit the basic, full model with holdout validation
@@ -147,7 +149,7 @@ nullResults <- seFin %>%
     mod$pred$pred_sd) %>% 
   rename(predRich = `...39`,
          predSd = `...40`) %>% 
-  mutate(rawResid = rich - predRich)
+  mutate(rawResid = maxRich - predRich)
 
 # residuals vs fitted
 residFit <- ggplot(nullResults, aes(x = predRich, y = rawResid)) + 
@@ -197,11 +199,10 @@ resids <- cowplot::plot_grid(residFit,
                              label_size = 12,
                              nrow = 2,
                              align = "h") 
-cowplot::save_plot("fig6.jpeg", resids, 
+cowplot::save_plot("fig4.jpeg", resids, 
                    nrow = 2,
                    dpi = 300,
                    base_width = 7)
-
 
 ############### spatial feature extraction ############### 
 # we can (and should) change the bandwidth on these to reflect the model results
@@ -231,7 +232,7 @@ spatDecompPlot <- ggplot() +
   facet_wrap(~scale) +
   labs(colour = "Adjustment \nfrom baseline")
 
-ggsave("fig5.jpeg", 
+ggsave("fig3.jpeg", 
        spatDecompPlot,
        width = 24,
        height = 17,
@@ -240,6 +241,181 @@ ggsave("fig5.jpeg",
        dpi = 300)
 
 
+
+############### spatial process checks ############### 
+# the goal here is to find the covariates that distort the spatial process the least
+# we evaluate these by 4 metrics: (1) min, (2) max bandwidth
+# (3) average distance between bandwidth
+# (4) correlation between current model predictions and those of the null model
+
+# save the model output
+nullResRef <- nullResults %>% 
+  select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
+  # rename to simplify things later
+  rename(predRichF = "predRich",
+         predSdF = "predSd")
+
+# first, get these for the null model
+subsetSum <- data.frame(
+  # min bandwidth
+  minBand = min(mod$bands), 
+  # max bandwidth
+  maxBand = max(mod$bands), 
+  # number of unique bands
+  nBand = length(mod$bands),
+  # geometric average difference between bands
+  # geometric mean because of the non-linear scaling of band increases
+  bandDiff = mod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
+  # correlation between predicted values
+  modCorr = cor(nullResRef$predRichF, nullResRef$predRichF),
+  # predictive score metrics
+  r2 = mod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
+  rmse = mod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
+  mae = mod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
+  # model name
+  mod = "Full"
+)
+
+# get a list of all unique covariate combinations
+varList <- c("secchi", "waterDepthMax", "Abs_F420",
+             "Alk", "Kfyll", "Kond_25", "TOC", "Tot_P",
+             "Temp", "pH", "TN") %>% sort()
+
+varComb <- combinations <- unlist(
+  lapply(1:length(varList), function(i) {
+    combn(varList, i, simplify = FALSE)
+  }), 
+  recursive = FALSE
+)
+
+# build helper function to get all the output
+# variables must be vector of strings
+getModSum <- function(variables){
+  seFilt <- seFin %>% select(all_of(c("samplingSiteX", "samplingSiteY", "maxRich",
+                                      # ID info for later
+                                      "samplingYr", "samplingSiteId",
+                                      variables))) %>% 
+    drop_na()
+  # specify model elements separately
+  coordsTest <- seFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
+  yTest <- seFilt %>% pull(maxRich)
+  
+  # fit the basic, full model with holdout validation
+  test_hv <- cf_glm_hv(y = yTest,
+                       coords = coordsTest, 
+                       family=poisson()) # poisson and quasipoisson are identical
+  
+  # then train the full model using the cf_glm function
+  testMod <- cf_glm(y = yTest,
+                    coords = coordsTest, mod_hv = test_hv)
+  
+  testRes <- seFilt %>% 
+    # select bare minimum for consistent column numbers
+    select("samplingSiteX", "samplingSiteY", "maxRich",
+           "samplingYr", "samplingSiteId") %>% 
+    bind_cols(
+      testMod$pred$pred, # Predictive mean
+      testMod$pred$pred_sd # Predictive SD
+    ) %>% 
+    rename(predRich = `...6`,
+           predSd = `...7`) %>% 
+    select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
+    left_join(nullResRef, by = c("samplingYr", "samplingSiteId")) %>% 
+    # quiet the output
+    suppressMessages()
+  
+  # do the same summary as before
+  return(
+    data.frame(
+      minBand = min(testMod$bands),
+      maxBand = max(testMod$bands),
+      nBand = length(testMod$bands),
+      bandDiff = testMod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
+      modCorr = cor(testRes$predRich, testRes$predRichF),
+      r2 = testMod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
+      rmse = testMod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
+      mae = testMod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
+      mod = paste(variables, collapse = ";")
+    ) %>% 
+      # quiet the output
+      suppressMessages()
+  )
+}
+
+for(i in 1:length(varComb)){
+  invisible({capture.output({
+    tempSum <- getModSum(varComb[[i]])
+  })})
+  # combine with total summary
+  subsetSum <- subsetSum %>% bind_rows(tempSum)
+}
+
+
+
+View(subsetSum)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# then, build a workflow for getting them from a random model
+covList <- c("secchi", "Tot_P")
+seFilt <- seFin %>% select(all_of(c("samplingSiteX", "samplingSiteY", "maxRich",
+                                    # ID info for later
+                                    "samplingYr", "samplingSiteId",
+                                    covList))) %>% 
+  drop_na()
+# specify model elements separately
+coordsTest <- seFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
+yTest <- seFilt %>% pull(maxRich)
+
+# fit the basic, full model with holdout validation
+test_hv <- cf_glm_hv(y = yTest,
+                    coords = coordsTest, 
+                    family=poisson()) # poisson and quasipoisson are identical
+
+# then train the full model using the cf_glm function
+testMod <- cf_glm(y = yTest,
+                  coords = coordsTest, mod_hv = test_hv)
+
+testRes <- seFilt %>% 
+  # select bare minimum for consistent column numbers
+  select("samplingSiteX", "samplingSiteY", "maxRich",
+         "samplingYr", "samplingSiteId") %>% 
+  bind_cols(
+    testMod$pred$pred, # Predictive mean
+    testMod$pred$pred_sd # Predictive SD
+    ) %>% 
+  rename(predRich = `...6`,
+         predSd = `...7`) %>% 
+  select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
+  left_join(nullResRef, by = c("samplingYr", "samplingSiteId")) %>% 
+  # quiet the output
+  suppressMessages()
+  
+# do the same summary as before
+subsetSum2 <- data.frame(
+  minBand = min(testMod$bands),
+  maxBand = max(testMod$bands),
+  nBand = length(testMod$bands),
+  bandDiff = testMod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
+  modCorr = cor(testRes$predRich, testRes$predRichF),
+  r2 = testMod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
+  rmse = testMod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
+  mae = testMod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
+  mod = paste(covList, collapse = ";")
+) %>% bind_rows(subsetSum)
+
+  
+  
 ########################### filter w/ chemistry data ###########################
 
 # re-run with just water sites with water chemistry data
@@ -252,11 +428,11 @@ View(
 )
 # filter only for values not NA in a few values
 seFinFilt <- seFin %>% drop_na(any_of(c(#"secchi", # missing values here are different from the chem
-  #"Abs_F420", # drops R2 to 74%
+  #"Abs_F420",
   #"Alk",
   #"Kfyll",
   #"Kond_25",
-  #"TOC", # drops R2 to 63%
+  #"TOC",
   "Tot_P",
   "Temp",
   #"pH",
@@ -278,7 +454,7 @@ seFinFilt <- seFin %>% drop_na(any_of(c(#"secchi", # missing values here are dif
 
 # prepare data for package
 coordFilt <- seFinFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
-yFilt <- seFinFilt %>% pull(rich)
+yFilt <- seFinFilt %>% pull(maxRich)
 # for later test
 #offsetFilt <- seFinFilt %>% pull(observationCount)
 
@@ -309,7 +485,7 @@ nullFiltResults <- seFinFilt %>%
     nullFilt$pred$pred_sd) %>% 
   rename(predRich = `...35`,
          predSd = `...36`) %>% 
-  mutate(rawResid = rich - predRich)
+  mutate(rawResid = maxRich - predRich)
 
 
 # residuals vs fitted
@@ -317,7 +493,7 @@ nullFiltResults <- seFinFilt %>%
 ggplot(nullFiltResults, aes(x = predRich, y = rawResid)) + geom_point()
 # absolutely lethal misfit for total and just TN data
 # true richness vs residual
-ggplot(nullFiltResults, aes(x = rich, y = rawResid)) + geom_point()
+ggplot(nullFiltResults, aes(x = maxRich, y = rawResid)) + geom_point()
 
 # temporal sensitivity
 # missing a few years later
@@ -345,7 +521,7 @@ ggplot() +
 # helper function to run things faster
 runQuickCF <- function(covList) {
   coordFilt <- seFinFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
-  yFilt <- seFinFilt %>% pull(rich)
+  yFilt <- seFinFilt %>% pull(maxRich)
   xFilt <- seFinFilt %>% select(all_of(covList)) %>% as.matrix()
   
   modHV <- cf_glm_hv(y = yFilt, x = xFilt, 
@@ -526,9 +702,12 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
        y = "Bandwitdh (km)",
        fill = bquote(R^2)) +
   # make limits & labels more readable
-  scale_fill_viridis_c(limits = c(0, round(max(modPlot$R2),2)),
-                       breaks = seq(0, round(max(modPlot$R2),2), 
-                                    length.out = 4)) +
+  scale_fill_viridis_c(limits = c(0, 
+                                  # get slightly above the rounded value just in case
+                                  round(max(modPlot$R2),2) + 0.01),
+                       # round sequence values to avoid trailing decimals
+                       breaks = round(seq(0, round(max(modPlot$R2),2) + 0.01,
+                                          length.out = 4), 2)) +
   scale_x_discrete(labels = scales::parse_format()) +
   # make x axis readable
   theme(
@@ -536,17 +715,7 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
   )
 
 # add another heatmap for FE coefficients showing
-# rescale by the fixed effect mean to get results on the same scale
-# first get the means from each covariate
-meanFE <- as.data.frame(t(seFinFilt %>% select(c("TPsq", "Tot_P", "Tsq", "Temp", "TNsq", "TN")) %>% 
-                            summarise(across(everything(), ~ mean(., na.rm = TRUE))))) %>% rename(meanEff = "V1") %>% 
-  rownames_to_column(var = "var")
-# combine with the original data
-modReFE <- left_join(modFE, meanFE, by = "var") %>% 
-  mutate(coefResc = exp(coef * meanEff))
-
-# modReFE the factors to our desited level
-modReFE <- modReFE %>% 
+modReFE <- modFE %>% 
   # make names more consistent & readable
   mutate(mod = str_replace_all(mod, "Tot_P", "TP"),
          # do this twice bc combining too much work
@@ -559,9 +728,9 @@ modReFE <- modReFE %>%
          isNeg = as.numeric(coef < 0)
   )
 
-modReFE <- bind_rows(modReFE,
-                     data.frame(
-                       coef = NA,
+modReFE <- modReFE %>%
+  # add null model
+  bind_rows(data.frame(coef = NA,
                        isSig = 0,
                        mod = "Null",
                        var = "TN",
@@ -573,7 +742,10 @@ modReFE <- bind_rows(modReFE,
     mod = factor(mod, levels = modelOrderClean),
     var = factor(var,
                  levels = c("TPsq", "TP", "Tsq", "T", "TNsq", "TN"),
-                 labels = c("TP^2", "TP", "T^2", "T", "TN^2", "TN")))
+                 labels = c("TP^2", "TP", "T^2", "T", "TN^2", "TN"))) #%>%
+  # remove intercept
+  #filter(!is.na(var))
+  
 
 # plot
 fePlot <- ggplot(data = modReFE, aes(mod, var, 
@@ -612,7 +784,7 @@ modSum <- cowplot::plot_grid(fePlot, spatPlot,
                    ncol = 1,
                    rel_heights = c(0.4, 1.4),
                    align = "v") 
-cowplot::save_plot("fig1.jpeg", modSum, 
+cowplot::save_plot("fig5.jpeg", modSum, 
           nrow = 2,
           dpi = 300,
           base_height = 5)
@@ -652,9 +824,9 @@ pearsonGOF <- sum((nullResults$rawResid)^2 / nullResults$predRich)
 
 ### unused diagnostics
 # raw vs fitted; quasi-QQ plot
-ggplot(nullResults, aes(x = rich, y = predRich)) + geom_point() +
+ggplot(nullResults, aes(x = maxRich, y = predRich)) + geom_point() +
   geom_abline(intercept = 0, slope = 1)
 # slightly less brute QQplot
-qqplot(nullResults$rich, nullResults$predRich)
+qqplot(nullResults$maxRich, nullResults$predRich)
 # residual histogram
 ggplot(nullResults, aes(x = rawResid)) + geom_histogram()
