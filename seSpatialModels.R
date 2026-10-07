@@ -360,66 +360,6 @@ cleanSubsetSum <- subsetSum %>%
 write.csv(cleanSubsetSum,
           "tableS2.csv")
 
-
-
-
-
-
-
-
-
-
-
-# then, build a workflow for getting them from a random model
-covList <- c("secchi", "Tot_P")
-seFilt <- seFin %>% select(all_of(c("samplingSiteX", "samplingSiteY", "maxRich",
-                                    # ID info for later
-                                    "samplingYr", "samplingSiteId",
-                                    covList))) %>% 
-  drop_na()
-# specify model elements separately
-coordsTest <- seFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
-yTest <- seFilt %>% pull(maxRich)
-
-# fit the basic, full model with holdout validation
-test_hv <- cf_glm_hv(y = yTest,
-                    coords = coordsTest, 
-                    family=poisson()) # poisson and quasipoisson are identical
-
-# then train the full model using the cf_glm function
-testMod <- cf_glm(y = yTest,
-                  coords = coordsTest, mod_hv = test_hv)
-
-testRes <- seFilt %>% 
-  # select bare minimum for consistent column numbers
-  select("samplingSiteX", "samplingSiteY", "maxRich",
-         "samplingYr", "samplingSiteId") %>% 
-  bind_cols(
-    testMod$pred$pred, # Predictive mean
-    testMod$pred$pred_sd # Predictive SD
-    ) %>% 
-  rename(predRich = `...6`,
-         predSd = `...7`) %>% 
-  select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
-  left_join(nullResRef, by = c("samplingYr", "samplingSiteId")) %>% 
-  # quiet the output
-  suppressMessages()
-  
-# do the same summary as before
-subsetSum2 <- data.frame(
-  minBand = min(testMod$bands),
-  maxBand = max(testMod$bands),
-  nBand = length(testMod$bands),
-  bandDiff = testMod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
-  modCorr = cor(testRes$predRich, testRes$predRichF),
-  r2 = testMod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
-  rmse = testMod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
-  mae = testMod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
-  mod = paste(covList, collapse = ";")
-) %>% bind_rows(subsetSum)
-
-  
-  
 ########################### filter w/ chemistry data ###########################
 
 # re-run with just water sites with water chemistry data
@@ -455,7 +395,9 @@ seFinFilt <- seFin %>% drop_na(any_of(c(
             #"TN",
             #"waterDepthMax"
   )) %>% 
-  mutate(TPsq = Tot_P^2,
+  mutate(
+    pHsq = pH^2
+    TPsq = Tot_P^2,
          Tsq = Temp^2,
          TNsq = TN^2)
 
