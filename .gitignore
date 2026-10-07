@@ -4,6 +4,7 @@
 .RData
 .Ruserdata
 *.Rproj
+*.rds
 
 # other file types
 *.zip
