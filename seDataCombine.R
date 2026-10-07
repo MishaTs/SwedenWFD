@@ -133,7 +133,7 @@ seChemFin <- seCompChem %>%
 
 # import Murphy list from https://ars.els-cdn.com/content/image/1-s2.0-S0304377019300300-mmc2.xlsx
 # citation from https://doi.org/10.1016/j.aquabot.2019.06.006
-murphyListRaw <- read_excel("MacrophyteCFGLMM/1-s2.0-S0304377019300300-mmc2.xlsx", 
+murphyListRaw <- read_excel("1-s2.0-S0304377019300300-mmc2.xlsx", 
                             sheet = "world", range = "A2:K3460")
 murphyListHelper <- murphyListRaw %>% 
   # get just species-level, not subspecies or variant
@@ -216,7 +216,7 @@ seMap <- st_as_sf(seMap, crs = 4326) %>% st_transform(crs = 3009)
 # spatially plot richness
 richPlot <- ggplot() + 
   geom_sf(data = seMap) +
-  geom_sf(data = seGeo, aes(colour = rich,
+  geom_sf(data = seGeo, aes(colour = maxRich,
                             shape = factor(inFilt,
                                            levels = c(1, 0),
                                            labels = c("Yes", "No")))) +
@@ -301,7 +301,7 @@ sumGrid <- cowplot::plot_grid(richPlot,
   cowplot::draw_plot(biLeg, 0.855, .0545, 0.1, 0.12)
 
 # save plot
-cowplot::save_plot("MacrophyteCFGLMM/fig4.jpeg", sumGrid, 
+cowplot::save_plot("fig2.jpeg", sumGrid, 
                    nrow = 1,
                    base_height = 5,
                    base_asp = 2.2,
