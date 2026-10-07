@@ -303,11 +303,15 @@ getModSum <- function(variables){
   # fit the basic, full model with holdout validation
   test_hv <- cf_glm_hv(y = yTest,
                        coords = coordsTest, 
-                       family=poisson()) # poisson and quasipoisson are identical
+                       family=poisson()) %>% 
+    # quiet the output
+    suppressMessages()
   
   # then train the full model using the cf_glm function
   testMod <- cf_glm(y = yTest,
-                    coords = coordsTest, mod_hv = test_hv)
+                    coords = coordsTest, mod_hv = test_hv) %>% 
+    # quiet the output
+    suppressMessages()
   
   testRes <- seFilt %>% 
     # select bare minimum for consistent column numbers
@@ -352,7 +356,8 @@ for(i in 1:length(varComb)){
 
 
 
-View(subsetSum)
+View(subsetSum %>% group_by(across(all_of(colnames(subsetSum %>% select(-mod))))) %>% 
+       slice_max(nchar(mod), n = 1))
 
 
 
