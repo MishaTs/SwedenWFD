@@ -1,7 +1,7 @@
 ########################### preparation ###########################
 library(tidyverse)
-# new versions of the package work very differently; install the 0.1.1 directly
-# pak::pak("spCF@0.1.1")
+# if default install gives wrong version, verify using direct v0.2.2 install
+# pak::pak("spCF@0.2.2")
 library(spCF)
 library(stringr)
 #library(fastDummies)
