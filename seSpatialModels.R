@@ -550,10 +550,8 @@ chemVarsList <- apply(varsGrid, # apply over the grid
 for(i in 2:length(chemVarsList)){
   # get the set of covariates we're working with now
   covVect <- chemVarsList[[i]]
-  # silently run its model
-  invisible({capture.output({
-    modTemp <- runQuickCF(covVect)
-  })})
+  # run the model
+  modTemp <- runQuickCF(covVect)
   # add to our temp spatial results vector
   modSums <- modSums %>% 
     mutate(tempBand = case_when(
