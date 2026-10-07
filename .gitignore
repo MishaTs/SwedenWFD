@@ -10,6 +10,8 @@
 *.jpeg
 # raw data files
 se*.csv
+# output tables
+table*.csv
 
 # Apple folder formatting
 **/.DS_Store

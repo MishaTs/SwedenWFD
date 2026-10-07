@@ -155,6 +155,17 @@ seMacroNames <- colnames(seSpecImp %>% select(`Acorus calamus`:`Zygnemataceae`))
 # now get our unique species names in the Murphy list
 seMacroMurphy <- intersect(macroMasterList, seMacroNames)
 
+# get these to exportable form
+seMacroExport <- data.frame(seMacroNames) %>% 
+  # make alphabetical
+  arrange(seMacroNames) %>% 
+  # check if Murphy
+  mutate(isMurphy = as.numeric(seMacroNames %in% seMacroMurphy))
+
+# export for supplement
+write_csv(seMacroExport, "tableS1.csv")
+  
+
 # first, get "true" richness by converting everything to 0/1
 seSpecProc <- seSpecImp %>% 
   mutate(across(all_of(seMacroNames), ~ as.numeric(.x > 0))) %>% 
