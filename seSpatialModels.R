@@ -354,12 +354,13 @@ for(i in 1:length(varComb)){
   subsetSum <- subsetSum %>% bind_rows(tempSum)
 }
 
+cleanSubsetSum <- subsetSum %>% 
+  group_by(across(all_of(colnames(subsetSum %>% select(-mod))))) %>% 
+  slice_max(nchar(mod), n = 1)
 
-
-View(subsetSum %>% group_by(across(all_of(colnames(subsetSum %>% select(-mod))))) %>% 
-       slice_max(nchar(mod), n = 1))
-
-
+# export for writing
+write.csv(cleanSubsetSum,
+          "tableS2.csv")
 
 
 
