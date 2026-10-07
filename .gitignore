@@ -8,6 +8,8 @@
 # other file types
 *.zip
 *.jpeg
+# raw data files
+se*.csv
 
 # Apple folder formatting
 **/.DS_Store
