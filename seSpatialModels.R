@@ -62,6 +62,7 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                           "observationCount",
                           "waterDepthMax",
                           "Alk",
+                          "Abs_F420",
                           "Kfyll",
                           "Kond_25",
                           "TOC",
@@ -73,7 +74,7 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                               samplingSiteX, samplingSiteY,
                               maxRich, murphyRich, tmiRich, tmi,
                               observationCount, waterDepthMax,
-                              Alk, Kfyll, Kond_25, TOC, pH,
+                              Abs_F420, Alk, Kfyll, Kond_25, TOC, pH,
                               Tot_P, Temp, TN)) %>% 
                           rename(Year = "samplingYr",
                                  Month = "samplingM",
@@ -85,6 +86,7 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                                  TMI = "tmi",
                                  `# Obs` = "observationCount",
                                  `Survey Depth` = "waterDepthMax",
+                                 Absorbance = "Abs_F420",
                                  Alkalinity = "Alk",
                                  `Chlorophyl-a` = "Kfyll",
                                  Conductivity = "Kond_25",
@@ -129,7 +131,7 @@ offset <- seFin %>% pull(observationCount)
 mod_hv <- cf_glm_hv(y = y, #x = x, 
                     #offset = offset, # looks like model doesn't find suitable coefficients with offset
                     coords = coords, 
-                    family=poisson()) # poisson and quasipoisson are identical
+                    family = negbin())
 
 # then train the full model using the cf_glm function
 mod <- cf_glm(y = y, #x = x, 
@@ -255,6 +257,8 @@ nullResRef <- nullResults %>%
 
 # first, get these for the null model
 subsetSum <- data.frame(
+  # number of observations
+  n = nrow(nullResRef),
   # min bandwidth
   minBand = min(mod$bands), 
   # max bandwidth
@@ -301,7 +305,7 @@ getModSum <- function(variables){
   # fit the basic, full model with holdout validation
   test_hv <- cf_glm_hv(y = yTest,
                        coords = coordsTest, 
-                       family=poisson()) %>% 
+                       family=negbin()) %>% 
     # quiet the output
     suppressMessages()
   
@@ -329,6 +333,7 @@ getModSum <- function(variables){
   # do the same summary as before
   return(
     data.frame(
+      n = nrow(testRes),
       minBand = min(testMod$bands),
       maxBand = max(testMod$bands),
       nBand = length(testMod$bands),
@@ -406,7 +411,7 @@ yFilt <- seFinFilt %>% pull(maxRich)
 # fit the null model again
 nullFiltHV <- cf_glm_hv(y = yFilt,
                         coords = coordFilt, 
-                        family = poisson()) # poisson and quasipoisson are identical
+                        family = negbin())
 nullFilt <- cf_glm(y = yFilt,
                    coords = coordFilt, 
                    mod_hv = nullFiltHV)
@@ -466,8 +471,7 @@ runQuickCF <- function(covList) {
   
   modHV <- cf_glm_hv(y = yFilt, x = xFilt, 
                      coords = coordFilt, 
-                     # poisson and quasipoisson are identical
-                     family = poisson()) %>% 
+                     family = negbin()) %>% 
     # silence output
     suppressMessages()
   
@@ -485,7 +489,9 @@ modSums <- data.frame(band = nullFiltHV$other$bands_all)
 # add null model
 modSums <- modSums %>% 
   mutate(Null = case_when(
-    band %in% nullFilt$band ~ nullFilt$e_summary$value[1],
+    band %in% nullFilt$band ~ nullFilt$e_summary %>% 
+      filter(str_detect(stat, "R2")) %>% 
+      pull(value),
     .default = 0
   ))
 
@@ -497,57 +503,53 @@ modScores <- as.data.frame(nullFilt$e_summary) %>%
               values_from = value) %>% 
   mutate(mod = "Null")
 
-#full list of covariates
-covListFull <- c("TN",
-                 "Temp",
-                 "Tot_P",
-                 "TNsq",
-                 "Tsq",
-                 "TPsq")
-
+# finally the fixed effects
+# left empty because we don't care about the null model
 modFE = data.frame(#var = covListFull,
   coef = numeric(),
   isSig = numeric(),
   mod = character()
 )
 
-# fully enumerate all candidate wq models
-cov1 <- c("TN")
-cov2 <- c("Temp")
-cov3 <- c("Tot_P")
-cov4 <- c("TN", "TNsq")
-cov5 <- c("Temp", "Tsq")
-cov6 <- c("Tot_P", "TPsq")
-cov7 <- c("TN", "Temp")
-cov8 <- c("TN", "TNsq", "Temp")
-cov9 <- c("TN", "Temp", "Tsq")
-cov10 <- c("TN", "TNsq", "Temp", "Tsq")
+#get full list of covariates
+finVars <- c("pH",
+             "Temp",
+             "TN",
+             "TOC",
+             "Tot_P",
+             "waterDepthMax")
 
-cov11 <- c("Tot_P", "Temp")
-cov12 <- c("Tot_P", "TPsq", "Temp")
-cov13 <- c("Tot_P", "Temp", "Tsq")
-cov14 <-  c("Tot_P", "TPsq", "Temp", "Tsq")
+# generate a matrix of states to simplify computation, where
+# 0 = omit; 1 = incl linear term only; 2 = incl linear & sqare terms
+varsGrid <- expand.grid(rep(list(0:2), length(finVars)))
 
-cov15 <- c("TN", "Tot_P")
-cov16 <- c("TN", "TNsq", "Tot_P")
-cov17 <- c("TN", "Tot_P", "TPsq")
-cov18 <- c("TN", "TNsq", "Tot_P", "TPsq")
-
-cov19 <- c("TN", "Temp", "Tot_P")
-cov20 <- c("TN", "TNsq", "Temp", "Tot_P")
-cov21 <- c("TN", "Temp", "Tsq", "Tot_P") 
-cov22 <- c("TN", "Temp", "Tot_P", "TPsq") 
-
-cov23 <- c("TN", "TNsq", "Temp", "Tsq", "Tot_P")
-cov24 <- c("TN", "TNsq", "Temp", "Tot_P", "TPsq")
-cov25 <- c("TN", "Temp", "Tsq", "Tot_P", "TPsq")
-cov26 <- c("TN", "TNsq", "Temp", "Tsq", "Tot_P", "TPsq")
+chemVarsList <- apply(varsGrid, # apply over the grid
+                      1, # for rows
+                      function(i) {
+                        unlist(Map(function(v, # for some variable
+                                            s) { # and for some state
+                          if (s == 0) {
+                            # include nothing
+                            return(NULL) 
+                          }
+                          else if (s == 1) {
+                            # include variable linearly
+                            return(v) 
+                          }
+                          else {
+                            # include variable linearly and as square
+                            c(v, paste0(v, "_sq")) 
+                          }
+                        }, finVars, i)) %>% 
+                          # remove element names
+                          unname() 
+                      })
 
 # loop through all our candidate sets
-for(i in 1:26){
+# start at 2 because 1 is our null model
+for(i in 2:length(chemVarsList)){
   # get the set of covariates we're working with now
-  # eval to parse for function use 
-  covVect <- eval(parse(text = paste0("cov",i)))
+  covVect <- chemVarsList[[i]]
   # silently run its model
   invisible({capture.output({
     modTemp <- runQuickCF(covVect)
@@ -565,8 +567,10 @@ for(i in 1:26){
   # get FE coefficients and significance
   # 1-variable case is a little different
   if(length(covVect) == 1){
-    feTemp <- modTemp$beta %>% rownames_to_column() %>% rename(var = "rowname") %>% 
-      filter(var == "x2") %>% 
+    feTemp <- modTemp$beta %>% 
+      # model output no longer provides any variable names
+      # assume that first row of the beta matrix is always the intercept
+      slice(-1) %>% 
       mutate(var = covVect[1],
              isSig = as.numeric(sign(lower_95CI) == sign(upper_95CI))) %>% 
       select(var, coef, isSig)
@@ -598,6 +602,45 @@ for(i in 1:26){
 }
 
 ########################### clean & plot results ###########################
+
+# clean up model scores
+modScoresExp <- modScores %>% 
+  # regex magic to clean things up
+  mutate(modClean = str_replace_all(mod,
+                                    # capture the complete second occurrence of a duplicate pair
+                                    # leaving the underscore suffix
+                                    "(^|;)([^;]+);(\\2(?:_\\d+)?)",
+                                    # using backreferences to 1st and 3rd groups (though 3rd never exists)
+                                    "\\1\\3") %>% 
+           str_replace_all(";", " + ") %>% 
+           str_replace_all("_sq", "^2") %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth")
+         ) %>% 
+  select(-mod) %>% 
+  relocate(modClean) %>% 
+  mutate(across(where(is.numeric), ~round(., 7)))
+
+# save for manuscript
+# some weird floating point issues with long training 00000000003 but it's fine
+write_csv(modScoresExp, "tableS3.csv")
+
+
+# check the FE numbers
+modFE %>% 
+  filter(var != "Intercept") %>%
+  mutate(var = var %>% str_replace_all("waterDepthMa$", "waterDepthMax") %>% 
+           str_replace_all("waterDepthMa_", "waterDepthMax_"),
+         containsSq = str_detect(mod, paste0(var, "_sq")),
+         isSigWith = as.numeric(isSig & containsSq)) %>%
+  summarise(.by = var,
+            n = n(),
+            nSig = sum(isSig),
+            nSigWith = sum(isSigWith))
+
+
+
 
 # get the minimum distance for all columns
 minDist <- modSums %>%
@@ -759,15 +802,6 @@ cowplot::save_plot("fig5.jpeg", modSum,
 
 
 ########################### old stuff (not used) ###########################
-
-# spCF does not provide a dispersion parameter for quasipoisson
-# we can either do tests with base glm() function, or
-# in basis-type additive models (e.g., GAMs) dispersion is best estimated from residuals
-# Pearson's goodness-of-fit for Poisson
-pearsonGOF <- sum((nullResults$rawResid)^2 / nullResults$predRich)
-# dispersion by dividing by degrees of freedom --> not available
-# can get DHARMa to work if there's a way to get simulated residuals
-
 ### unused diagnostics
 # raw vs fitted; quasi-QQ plot
 ggplot(nullResults, aes(x = maxRich, y = predRich)) + geom_point() +
