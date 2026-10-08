@@ -625,7 +625,7 @@ modScoresExp <- modScores %>%
 write_csv(modScoresExp, "tableS3.csv")
 
 
-# check the FE numbers
+# check the full FE numbers
 modFE %>% 
   filter(var != "Intercept") %>%
   mutate(var = var %>% str_replace_all("waterDepthMa$", "waterDepthMax") %>% 
@@ -637,49 +637,65 @@ modFE %>%
             nSig = sum(isSig),
             nSigWith = sum(isSigWith))
 
-
-
+# get only the models without square terms for reporting
+modSumsVis <- modSums %>% select(!contains("_sq"))
+modFeVis <- modFE %>% filter(!str_detect(mod, "_sq"))
 
 # get the minimum distance for all columns
-minDist <- modSums %>%
+minDist <- modSumsVis %>%
   filter(if_any(-band, ~ . != 0)) %>%
   summarise(minDist = min(band)) %>%
   pull(minDist)
 
-# set clean model order for readability
-modelOrderClean <- str_replace_all(
-  str_replace_all(colnames(modSums)[-1],
-                  "Temp","T"),
-  "Tot_P","TP")
+# set clean model order for readability (first step)
+modelOrderClean <- colnames(modSumsVis)[-1] %>% 
+  str_replace_all("Temp", "T") %>% 
+  str_replace_all("Tot_P", "TP") %>% 
+  str_replace_all("waterDepthMax", "Depth")
 
 # format for plot
-modOrderLab <- str_replace_all(modelOrderClean, "sq", "(^2") %>% 
+modOrderLab <- modelOrderClean %>% 
+  # another regex to remove all the ; and duplicates with +
+  # kind of irrelevant now that there are no square terms but it's fine
+  str_replace_all("_sq", "(^2") %>% 
   str_remove_all("\\;[:alpha:]{1,2}\\(") %>%
   str_replace_all("\\;", " + ")
-  # probably a better way to do this, but this is fine
-  #str_replace_all("\\^", "\\(^")
 
-modPlot <- modSums %>% 
+modelOrderFinal <- c(modelOrderClean %>% 
+                       as_tibble() %>% 
+                       filter(!str_detect(value, "pH")) %>% 
+                       pull(value),
+                     modelOrderClean %>% 
+                       as_tibble() %>% 
+                       filter(str_detect(value, "pH")) %>% 
+                       pull(value))
+modelLabelFinal <- c(modOrderLab %>% 
+                       as_tibble() %>% 
+                       filter(!str_detect(value, "pH")) %>% 
+                       pull(value),
+                     modOrderLab %>% 
+                       as_tibble() %>% 
+                       filter(str_detect(value, "pH")) %>% 
+                       pull(value))
+
+modPlot <- modSumsVis %>% 
   # remove all bandwidths below the minimum detection for all models
   filter(band >= minDist) %>%
   # convert from m to km
   mutate(band = band/1000) %>% 
-  pivot_longer(cols = colnames(modSums)[-1],
+  pivot_longer(cols = colnames(modSumsVis)[-1],
                names_to = "modName",
                values_to = "R2") %>% 
   # make names more consistent & readable
-  mutate(modName = str_replace_all(modName,
-                                   "Tot_P",
-                                   "TP"),
-         # do this twice bc combining too much work
-         modName = str_replace_all(modName,
-                                   "Temp",
-                                   "T")) %>% 
+  mutate(modName = modName %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth")) %>% 
   # format factor levels manually to make plot more readable
   mutate(distance = as.factor(format(round(band, 1), nsmall = 1)),
          modName = factor(modName,
-                          levels = modelOrderClean,
-                          labels = modOrderLab))
+                          levels = modelOrderFinal,
+                          labels = modelLabelFinal))
 
 # plot
 spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
@@ -695,25 +711,31 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
                        # round sequence values to avoid trailing decimals
                        breaks = round(seq(0, round(max(modPlot$R2),2) + 0.01,
                                           length.out = 4), 2)) +
-  scale_x_discrete(labels = scales::parse_format()) +
+  scale_x_discrete(labels = scales::parse_format(),
+                   position = "top") +
   # make x axis readable
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    axis.text.x = element_text(angle = -55,
+                               hjust = 1)
   )
 
 # add another heatmap for FE coefficients showing
-modReFE <- modFE %>% 
+modReFE <- modFeVis %>% 
   # make names more consistent & readable
-  mutate(mod = str_replace_all(mod, "Tot_P", "TP"),
-         # do this twice bc combining too much work
-         mod = str_replace_all(mod, "Temp", "T"),
+  mutate(mod = mod %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth"),
          # and again for the variables
-         var = var %>% replace_when(
-           var == "Tot_P" ~ "TP",
-           var == "Temp" ~ "T"
-         ),
+         var = var %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth") %>% 
+           str_replace_all("waterDepthMa", "Depth"),
          isNeg = as.numeric(coef < 0)
-  )
+  ) %>%
+  # remove intercept
+  filter(var != "Intercept")
 
 modReFE <- modReFE %>%
   # add null model
@@ -726,12 +748,10 @@ modReFE <- modReFE %>%
                        isNeg = NA
                      )) %>% 
   mutate(# set factor levels to improve readability
-    mod = factor(mod, levels = modelOrderClean),
-    var = factor(var,
-                 levels = c("TPsq", "TP", "Tsq", "T", "TNsq", "TN"),
-                 labels = c("TP^2", "TP", "T^2", "T", "TN^2", "TN"))) #%>%
-  # remove intercept
-  #filter(!is.na(var))
+    mod = factor(mod, 
+                 levels = modelOrderFinal,
+                 labels = modelLabelFinal),
+    var = factor(var)) 
   
 
 # plot
@@ -761,7 +781,7 @@ fePlot <- ggplot(data = modReFE, aes(mod, var,
                       guide = "none") +
   theme_bw() +
   labs(x = "",
-       y = "") +
+       y = "") + 
   theme(axis.ticks.x = element_blank(),
         axis.text.x = element_blank()
   ) 
@@ -774,7 +794,7 @@ modSum <- cowplot::plot_grid(fePlot, spatPlot,
 cowplot::save_plot("fig5.jpeg", modSum, 
           nrow = 2,
           dpi = 300,
-          base_height = 5)
+          base_height = 6)
 
 
 
