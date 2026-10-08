@@ -776,23 +776,6 @@ cowplot::save_plot("fig5.jpeg", modSum,
           dpi = 300,
           base_height = 5)
 
-# possible extensions:
-# explore the survey effort fixed effects
-#       -our goal is to find fixed effects that give us similar bandwidths before and after site filtering
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -808,3 +791,243 @@ ggplot(nullResults, aes(x = maxRich, y = predRich)) + geom_point() +
 qqplot(nullResults$maxRich, nullResults$predRich)
 # residual histogram
 ggplot(nullResults, aes(x = rawResid)) + geom_histogram()
+
+## LLM output automatic function for calculating dominance
+# roughly a measure of predictive variable importance
+# unused; verification incomplete; included only for interested readers
+
+# both general (equally averaged) and conditional (weighted based on model size)
+# non-bootstrapped (unlike in literature) and perpetuates bias in model space
+# evaluates squared effects: "incremental benefits of adding non-linearity"
+# for more, see https://psycnet.apa.org/doi/10.1037/1082-989X.8.2.129
+dominance_contributions <- function(data,
+                                    model_col = 1,
+                                    metric_col = 2,
+                                    higher_is_better = FALSE,
+                                    sep = ";",
+                                    sq_suffix = "_sq") {
+  
+  ###########  1. Standardise input  ########### 
+  dat <- data %>%
+    transmute(model = as.character(data[[model_col]]),
+              metric = as.numeric(data[[metric_col]])) %>%
+    mutate(model = str_trim(model),
+           model = if_else(is.na(model), "", model))
+  
+  ###########  2. Parse model strings into sets of terms  ########### 
+  model_terms <- dat %>%
+    mutate(
+      terms = str_split(model, fixed(sep)),
+      terms = map(terms, ~ .x[.x != ""]),
+      terms = map(terms, ~ sort(unique(.x))),
+      key = map_chr(terms, paste, collapse = sep),
+      # Number of terms in the model; model size used for conditional dominance
+      model_size = map_int(terms, length)
+    )
+  
+  # Check for duplicate specifications
+  duplicated_models <- model_terms %>%
+    count(key) %>%
+    filter(n > 1)
+  
+  if (nrow(duplicated_models) > 0) {
+    stop(
+      "Duplicate model specifications detected. ",
+      "Each unique model must occur only once."
+    )
+  }
+  
+  # Lookup table for metric values
+  lookup <- model_terms %>%
+    select(key, metric)
+  
+  ###########  3. Expand models into model/term combinations  ########### 
+  expanded <- model_terms %>%
+    select(key, terms, model_size) %>%
+    unnest_longer(terms, values_to = "term")
+  
+  ########### 4. Construct nested model by removing each term  ########### 
+  comparisons <- expanded %>%
+    mutate(
+      is_squared = str_ends(term, fixed(sq_suffix)),
+      
+      base_term = if_else(
+        is_squared,
+        str_remove(term, fixed(sq_suffix)),
+        term
+      ),
+      
+      reduced_terms = map2(
+        key,
+        term,
+        ~ {
+          current <- str_split(.x, fixed(sep))[[1]]
+          current <- current[current != ""]
+          sort(setdiff(current, .y))
+        }
+      ),
+      
+      reduced_key = map_chr(
+        reduced_terms,
+        paste,
+        collapse = sep
+      ),
+      
+      # Size of the simpler/nested model.
+      reduced_model_size = model_size - 1L
+    )
+  
+  ########### 5. Match each comparison to its nested model  ########### 
+  comparisons <- comparisons %>%
+    left_join(
+      lookup %>%
+        rename(
+          reduced_key = key,
+          metric_without = metric
+        ),
+      by = "reduced_key"
+    ) %>%
+    left_join(
+      lookup %>%
+        rename(
+          key = key,
+          metric_with = metric
+        ),
+      by = "key"
+    ) %>%
+    filter(
+      !is.na(metric_without),
+      !is.na(metric_with)
+    )
+  
+  ###########  6. Enforce hierarchical treatment of squared terms ########### 
+  #
+  # For var1_sq:
+  #
+  #   var1 + var1_sq + A
+  #             vs
+  #   var1 + A
+  #
+  # rather than:
+  #
+  #   var1 + var1_sq + A
+  #             vs
+  #   A
+  comparisons <- comparisons %>%
+    filter(
+      !is_squared |
+        map2_lgl(
+          reduced_terms,
+          base_term,
+          ~ .y %in% .x
+        )
+    )
+  
+  ###########  7. Calculate marginal improvement  ########### 
+  #
+  # For RMSE-like metrics:
+  #
+  #   improvement = metric_without - metric_with
+  #
+  # Therefore:
+  #
+  #   positive = improvement
+  #   negative = deterioration
+  comparisons <- comparisons %>%
+    mutate(
+      delta = if (higher_is_better) {
+        metric_with - metric_without
+      } else {
+        metric_without - metric_with
+      }
+    )
+  
+  ###########  8. CONDITIONAL DOMINANCE  ########### 
+  #
+  # Conditional dominance is calculated separately for every
+  # model size.
+  #
+  # model_size refers to the larger model:
+  #
+  #   A + B + C  -> model_size = 3
+  #   A + B      -> reduced size = 2
+  #
+  # Thus the contribution is "adding the variable to a model
+  # of size model_size - 1".
+  conditional <- comparisons %>%
+    group_by(term, base_term, is_squared, model_size) %>%
+    summarise(
+      n_comparisons = n(),
+      conditional_mean = mean(delta, na.rm = TRUE),
+      
+      conditional_sd = if (n() > 1) {
+        sd(delta, na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      # This is the uncertainty of the mean within the
+      # available model contexts at this model size.
+      conditional_se = if (n() > 1) {
+        sd(delta, na.rm = TRUE) / sqrt(n())
+      } else {
+        NA_real_
+      },
+      
+      .groups = "drop"
+    ) %>%
+    mutate(
+      term_type = if_else(
+        is_squared,
+        "squared/additional",
+        "linear"
+      )
+    ) %>%
+    arrange(term, model_size)
+  
+  ###########  9. GENERAL DOMINANCE  ########### 
+  #
+  # Each model size receives equal weight.
+  #
+  # G_j = mean(C_jk)
+  #
+  # where C_jk is the conditional contribution at model size k.
+  #
+  # General uncertainty is the SD of C_jk across model sizes.
+  # This is explicitly MODEL-SPACE variability, not sampling SE.
+  general <- conditional %>%
+    group_by(term, base_term, is_squared, term_type) %>%
+    summarise(
+      n_model_sizes = n(),
+      general_mean = mean(conditional_mean, na.rm = TRUE),
+      general_sd = if (n() > 1) {
+        sd(conditional_mean, na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      total_comparisons = sum(n_comparisons),
+      min_model_size = min(model_size),
+      max_model_size = max(model_size),
+      .groups = "drop") %>%
+    arrange(desc(general_mean))
+  
+  ########### 10. Return all results  ########### 
+  list(
+    # primary, equal-weighted comparison
+    general = general,
+    # slightly awkward summary where each row is a different # parameters too
+    # needs post-processing to be re-weighted into a single metric
+    conditional = conditional,
+    # more just an internal summary of the comparisons
+    comparisons = comparisons
+  )
+}
+
+# run to test with RMSE (but can re-run with MAE, for instance)
+domTest <- dominance_contributions(data = modScores %>% 
+                                     # get columns in the right order
+                                     select(c(mod, validation_RMSE)) %>% 
+                                     # format the null model approriately
+                                     mutate(mod = mod %>% str_remove_all("Null")))
+
+# general dominance is probably the only usable one in this state
+#domTest$general
