@@ -661,6 +661,8 @@ modOrderLab <- modelOrderClean %>%
   str_remove_all("\\;[:alpha:]{1,2}\\(") %>%
   str_replace_all("\\;", " + ")
 
+# create manual ordering of the models and labels
+# to better accentuate pH and Depth patterns
 modelOrderFinal <- c(modelOrderClean %>% 
                        as_tibble() %>% 
                        filter(!str_detect(value, "pH")) %>% 
@@ -678,9 +680,15 @@ modelLabelFinal <- c(modOrderLab %>%
                        filter(str_detect(value, "pH")) %>% 
                        pull(value))
 
+# further clean up bandwidths
+inclBands <- modSumsVis %>% 
+  mutate(r2Sum = rowSums(across(-band))) %>% 
+  filter(r2Sum > 0) %>% 
+  pull(band)
+
 modPlot <- modSumsVis %>% 
-  # remove all bandwidths below the minimum detection for all models
-  filter(band >= minDist) %>%
+  # remove all bandwidths not found in any visualised models
+  filter(band %in% inclBands) %>%
   # convert from m to km
   mutate(band = band/1000) %>% 
   pivot_longer(cols = colnames(modSumsVis)[-1],
@@ -695,7 +703,9 @@ modPlot <- modSumsVis %>%
   mutate(distance = as.factor(format(round(band, 1), nsmall = 1)),
          modName = factor(modName,
                           levels = modelOrderFinal,
-                          labels = modelLabelFinal))
+                          labels = modelLabelFinal),
+         R2 = R2 %>% na_if(0)) %>% 
+  filter()
 
 # plot
 spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
@@ -705,19 +715,12 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
        y = "Bandwitdh (km)",
        fill = bquote(R^2)) +
   # make limits & labels more readable
-  scale_fill_viridis_c(limits = c(0, 
-                                  # get slightly above the rounded value just in case
-                                  round(max(modPlot$R2),2) + 0.01),
-                       # round sequence values to avoid trailing decimals
-                       breaks = round(seq(0, round(max(modPlot$R2),2) + 0.01,
-                                          length.out = 4), 2)) +
-  scale_x_discrete(labels = scales::parse_format(),
-                   sec.axis = dup_axis(labels = NULL)) +
-  #scale_y_discrete(limits = rev) + 
+  scale_fill_viridis_c(na.value = "transparent") +
   # make x axis readable
   theme(
     axis.text.x = element_text(angle = 55,
                                hjust = 1),
+    # bring closer to the other plot
     plot.margin = margin(t = 0.1, b = 5.5, l = 5.5, r = 5.5)
   )
 
@@ -737,9 +740,7 @@ modReFE <- modFeVis %>%
          isNeg = as.numeric(coef < 0)
   ) %>%
   # remove intercept
-  filter(var != "Intercept")
-
-modReFE <- modReFE %>%
+  filter(var != "Intercept") %>%
   # add null model
   bind_rows(data.frame(coef = NA,
                        isSig = 0,
@@ -753,7 +754,8 @@ modReFE <- modReFE %>%
     mod = factor(mod, 
                  levels = modelOrderFinal,
                  labels = modelLabelFinal),
-    var = factor(var)) 
+    var = factor(var,
+                 levels = c("T", "TN", "TOC", "TP", "Depth", "pH"))) 
   
 
 # plot
@@ -781,26 +783,29 @@ fePlot <- ggplot(data = modReFE, aes(mod, var,
   # add outline to boxes corresponding to significant coefficients
   scale_colour_manual(values = c("grey"),
                       guide = "none") +
-  scale_x_discrete(sec.axis = dup_axis(labels = NULL)) +
+  scale_x_discrete(position = "top") +
   theme_bw() +
   labs(x = "",
        y = "") + 
-  theme(axis.text.x = element_blank(),
-        plot.margin = margin(t = 5.5, b = 0.1, l = 5.5, r = 5.5)
-  ) 
+  theme(axis.text.x = element_text(angle = -55,
+                                   hjust = 1),
+        plot.margin = margin(t = 5.5, b = 0.2, l = 5.5, r = 5.5),
+        #legend.justification = c(0.5, 0.9)
+  )
 
 modSum <- cowplot::plot_grid(fePlot, spatPlot, 
                    labels = c("a", "b"),
                    ncol = 1,
-                   rel_heights = c(0.4, 1.4),
+                   label_x = 0,
+                   label_y = c(0.46, 1.02),
+                   rel_heights = c(0.7, 1.4),
                    align = "v") 
 cowplot::save_plot("fig5.jpeg", modSum, 
           nrow = 2,
           dpi = 300,
           base_height = 5,
           base_asp = 2.2)
-
-
+ 
 
 
 
