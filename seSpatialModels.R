@@ -712,11 +712,13 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
                        breaks = round(seq(0, round(max(modPlot$R2),2) + 0.01,
                                           length.out = 4), 2)) +
   scale_x_discrete(labels = scales::parse_format(),
-                   position = "top") +
+                   sec.axis = dup_axis(labels = NULL)) +
+  #scale_y_discrete(limits = rev) + 
   # make x axis readable
   theme(
-    axis.text.x = element_text(angle = -55,
-                               hjust = 1)
+    axis.text.x = element_text(angle = 55,
+                               hjust = 1),
+    plot.margin = margin(t = 0.1, b = 5.5, l = 5.5, r = 5.5)
   )
 
 # add another heatmap for FE coefficients showing
@@ -779,11 +781,12 @@ fePlot <- ggplot(data = modReFE, aes(mod, var,
   # add outline to boxes corresponding to significant coefficients
   scale_colour_manual(values = c("grey"),
                       guide = "none") +
+  scale_x_discrete(sec.axis = dup_axis(labels = NULL)) +
   theme_bw() +
   labs(x = "",
        y = "") + 
-  theme(axis.ticks.x = element_blank(),
-        axis.text.x = element_blank()
+  theme(axis.text.x = element_blank(),
+        plot.margin = margin(t = 5.5, b = 0.1, l = 5.5, r = 5.5)
   ) 
 
 modSum <- cowplot::plot_grid(fePlot, spatPlot, 
@@ -794,7 +797,8 @@ modSum <- cowplot::plot_grid(fePlot, spatPlot,
 cowplot::save_plot("fig5.jpeg", modSum, 
           nrow = 2,
           dpi = 300,
-          base_height = 6)
+          base_height = 5,
+          base_asp = 2.2)
 
 
 
