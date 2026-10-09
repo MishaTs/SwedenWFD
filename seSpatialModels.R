@@ -186,7 +186,11 @@ residSpat <- ggplot() +
   geom_sf(data = seMap) +
   geom_sf(data = nullSpatial, aes(colour = rawResid)) +
   theme_bw() +
-  scale_colour_viridis_c() +
+  scale_colour_gradientn(
+    colours = khroma::color("managua")(256),
+    rescaler = ~ scales::rescale_mid(., mid = 0),
+    limits = range(nullPlot$rawResid, na.rm = TRUE)
+  ) + 
   labs(colour = "Error")
 
 # format plots in replicable cowplot format
@@ -209,9 +213,15 @@ cowplot::save_plot("fig4.jpeg", resids,
 ############### spatial feature extraction ############### 
 # we can (and should) change the bandwidth on these to reflect the model results
 # can then extract the specific preditive means for just those bandwidth features of a certain scale
-mod_s1 <- sp_scalewise(mod,bw_range=c(100000,Inf)) # Large scale (100+ km), 15 scales - 1
-mod_s2 <- sp_scalewise(mod,bw_range=c(10000,100000)) # medium scale (10-100 km), 21 scales - 2
-mod_s3 <- sp_scalewise(mod,bw_range=c(0,10000)) # medium scale (under 10 km), 14 scales - 2
+# so, split the null model bands into three equal groups for decomposition
+bandSplit <- split(mod$bands, sort(rep_len(1:3, length(mod$bands))))
+bandCut1 <- mean(c(min(bandSplit$`1`), max(bandSplit$`2`))) %>% signif(digits = 1)
+bandCut2 <- mean(c(min(bandSplit$`2`), max(bandSplit$`3`))) %>% signif(digits = 1)
+
+# then cut the processes accordingly
+mod_s1 <- sp_scalewise(mod,bw_range=c(bandCut1, Inf)) # Large scale
+mod_s2 <- sp_scalewise(mod,bw_range=c(bandCut2, bandCut1)) # medium scale
+mod_s3 <- sp_scalewise(mod,bw_range=c(0, bandCut2)) # medium scale
 
 nullPlot <- nullSpatial %>% 
   bind_cols(mod_s1$pred$pred,
@@ -224,13 +234,20 @@ nullPlot <- nullSpatial %>%
                names_to = "scale",
                values_to = "predSpat") %>% 
   mutate(scale = factor(scale,
-                        levels = c("small", "medium", "large")))
+                        levels = c("small", "medium", "large"),
+                        labels = c("Small", "Intermediate", "Large")))
 
 spatDecompPlot <- ggplot() + 
   geom_sf(data = seMap) +
-  geom_sf(data = nullPlot, aes(colour = predSpat)) +
+  geom_sf(data = nullPlot, aes(colour = predSpat)) + 
+  #geom_sf(data = nullPlot, shape = 21, colour = "black", alpha = 0.3) +
   theme_bw() +
-  scale_colour_viridis_c() +
+  # rescale the palette around 0, which is darker
+  scale_colour_gradientn(
+    colours = khroma::color("managua")(256),
+    rescaler = ~ scales::rescale_mid(., mid = 0),
+    limits = range(nullPlot$predSpat, na.rm = TRUE)
+  ) + 
   facet_wrap(~scale) +
   labs(colour = "Adjustment \nfrom baseline")
 
