@@ -641,9 +641,8 @@ modScoresExp <- modScores %>%
 # some weird floating point issues with long training 00000000003 but it's fine
 write_csv(modScoresExp, "tableS3.csv")
 
-
 # check the full FE numbers
-modFE %>% 
+fullFixedSummary <- modFE %>% 
   filter(var != "Intercept") %>%
   mutate(var = var %>% str_replace_all("waterDepthMa$", "waterDepthMax") %>% 
            str_replace_all("waterDepthMa_", "waterDepthMax_"),
@@ -653,6 +652,68 @@ modFE %>%
             n = n(),
             nSig = sum(isSig),
             nSigWith = sum(isSigWith))
+
+# check the full bandwidth results
+modSumsTot <- modSums %>% 
+  pivot_longer(!band,
+               names_to = "mod",
+               values_to = "r2") %>% 
+  # regex magic to clean things up
+  mutate(pH = as.numeric(mod %>% str_detect("pH")),
+         pH_sq = as.numeric(mod %>% str_detect("pH_sq")),
+         Depth = as.numeric(mod %>% str_detect("waterDepthMa")),
+         Depth_sq = as.numeric(mod %>% str_detect("waterDepthMax_sq")),
+         TN = as.numeric(mod %>% str_detect("TN")),
+         TN_sq = as.numeric(mod %>% str_detect("TN_sq")),
+         Temp = as.numeric(mod %>% str_detect("Temp")),
+         Temp_sq = as.numeric(mod %>% str_detect("Temp_sq")),
+         TP = as.numeric(mod %>% str_detect("Tot_P")),
+         TP_sq = as.numeric(mod %>% str_detect("Tot_P_sq")),
+         TOC = as.numeric(mod %>% str_detect("TOC")),
+         TOC_sq = as.numeric(mod %>% str_detect("TOC_sq")),
+         nTerms = rowSums(across(-c("band", "mod", "r2")))
+         ) %>%
+  filter(r2 != 0) %>%
+  pivot_longer(!c("band", "mod", "r2", "nTerms"),
+               names_to = "var",
+               values_to = "isInMod") %>% 
+  filter(isInMod != 0) %>% 
+  select(-isInMod) %>% 
+  summarise(.by = c("band", "var"),
+            n = n(),
+            largestMod = max(nTerms),
+            bestMod = max(r2),
+            worstMod = min(r2)) %>% 
+  select(c("band", "var", "n")) %>% 
+  mutate(band = as.factor(format(round(band/1000, 1), nsmall = 1))) %>%
+  pivot_wider(names_from = "var",
+              values_from = "n") %>% 
+  mutate(across(everything(), ~replace_na(., 0))) %>% 
+  pivot_longer(!band,
+               names_to = "var",
+               values_to = "n") %>%
+  left_join(fullFixedSummary %>% 
+              select("var", "n") %>%
+              mutate(var = var %>% 
+                       str_replace_all("waterDepthMax", "Depth") %>% 
+                       str_replace_all("Tot_P", "TP")) %>% 
+              rename(nVar = "n"),
+            by = "var") %>%
+  mutate(nScaled = n/nVar)
+
+# rough plot; maybe better to improve the X-axis later
+ggplot(modSumsTot, aes(var, band, fill = nScaled)) +
+  geom_tile() +
+  theme_bw() + 
+  labs(x = "",
+       y = "Bandwitdh (km)",
+       fill = "% included") +
+  scale_fill_viridis_c()
+
+  
+
+
+
 
 # get only the models without square terms for reporting
 modSumsVis <- modSums %>% select(!contains("_sq"))
