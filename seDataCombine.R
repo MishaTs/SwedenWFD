@@ -156,11 +156,17 @@ seMacroNames <- colnames(seSpecImp %>% select(`Acorus calamus`:`Zygnemataceae`))
 seMacroMurphy <- intersect(macroMasterList, seMacroNames)
 
 # get these to exportable form
-seMacroExport <- data.frame(seMacroNames) %>% 
+seMacroExport <- seSpecImp %>% 
+  # get all column names
+  select(`Acorus calamus`:`Zygnemataceae`) %>% 
+  # remove those there everything is 0
+  select(where(~ any(. != 0))) %>% 
+  colnames() %>% 
+  data.frame() %>% 
   # make alphabetical
-  arrange(seMacroNames) %>% 
+  arrange(`.`) %>% 
   # check if Murphy
-  mutate(isMurphy = as.numeric(seMacroNames %in% seMacroMurphy))
+  mutate(isMurphy = as.numeric(`.` %in% seMacroMurphy))
 
 # export for supplement
 write_csv(seMacroExport, "tableS1.csv")
