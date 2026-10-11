@@ -616,7 +616,7 @@ for(i in 2:length(chemVarsList)){
   modScores <- bind_rows(modScores, modScoreTemp)
 }
 
-########################### clean & plot results ###########################
+####################### clean & plot overall results #######################
 
 # clean up model scores
 modScoresExp <- modScores %>% 
@@ -651,14 +651,33 @@ fullFixedSummary <- modFE %>%
   summarise(.by = var,
             n = n(),
             nSig = sum(isSig),
-            nSigWith = sum(isSigWith))
+            nSigWith = sum(isSigWith)) %>% 
+  mutate(var = var %>% 
+           str_replace_all("waterDepthMax", "Depth") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("_sq", "^2"),
+         # set as factor for ordering
+         var = var %>% factor(levels = c("Depth", "Depth^2",
+                                         "pH", "pH^2",
+                                         "TN", "TN^2",
+                                         "TOC", "TOC^2",
+                                         "TP", "TP^2",
+                                         "T", "T^2"))) %>% 
+  arrange(var)
+
+colnames(fullFixedSummary) <- c("", "# Total Models", 
+                                "# Times Significant (Overall)",
+                                "# Times Significant (with Squared Term)")
+
+write_csv(fullFixedSummary, "tableS4.csv")
 
 # check the full bandwidth results
 modSumsTot <- modSums %>% 
   pivot_longer(!band,
                names_to = "mod",
                values_to = "r2") %>% 
-  # regex magic to clean things up
+  # lazy regex to clean things up
   mutate(pH = as.numeric(mod %>% str_detect("pH")),
          pH_sq = as.numeric(mod %>% str_detect("pH_sq")),
          Depth = as.numeric(mod %>% str_detect("waterDepthMa")),
@@ -674,24 +693,29 @@ modSumsTot <- modSums %>%
          nTerms = rowSums(across(-c("band", "mod", "r2")))
          ) %>%
   filter(r2 != 0) %>%
+  # pivoting here and back is the fastest way to process the data
   pivot_longer(!c("band", "mod", "r2", "nTerms"),
                names_to = "var",
                values_to = "isInMod") %>% 
   filter(isInMod != 0) %>% 
   select(-isInMod) %>% 
+  # these sorts of summary statistics are only possible in long format
   summarise(.by = c("band", "var"),
             n = n(),
             largestMod = max(nTerms),
             bestMod = max(r2),
             worstMod = min(r2)) %>% 
   select(c("band", "var", "n")) %>% 
+  # then fix the units
   mutate(band = as.factor(format(round(band/1000, 1), nsmall = 1))) %>%
   pivot_wider(names_from = "var",
               values_from = "n") %>% 
+  # assume NA means that the bandwidth wasn't found in the data
   mutate(across(everything(), ~replace_na(., 0))) %>% 
   pivot_longer(!band,
                names_to = "var",
                values_to = "n") %>%
+  # for scaling, use the previously-cleaned table
   left_join(fullFixedSummary %>% 
               select("var", "n") %>%
               mutate(var = var %>% 
@@ -699,22 +723,55 @@ modSumsTot <- modSums %>%
                        str_replace_all("Tot_P", "TP")) %>% 
               rename(nVar = "n"),
             by = "var") %>%
-  mutate(nScaled = n/nVar)
+  mutate(nScaled = n/nVar*100,
+         var = var %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("_sq", "^2")) %>% 
+  # not sure why it doesn't work otherwise, but easiest to do it this way
+  rowwise() %>% 
+  mutate(labVar = list(bquote(phantom(x^2) * .(parse(text = var)[[1]])))) %>%
+  ungroup() %>% 
+  # order things manually to get as desired
+  mutate(var = var %>% factor(levels = c("Depth", "Depth^2",
+                                         "pH", "pH^2",
+                                         "TN", "TN^2",
+                                         "TOC", "TOC^2",
+                                         "TP", "TP^2",
+                                         "T", "T^2")))
 
-# rough plot; maybe better to improve the X-axis later
-ggplot(modSumsTot, aes(var, band, fill = nScaled)) +
+# fix the label ordering mismatch
+labVars <- modSumsTot$labVar
+names(labVars) <- as.character(modSumsTot$var)
+
+# rough plot for supplement of spatial patterns
+spatPlotFull <- ggplot(modSumsTot, aes(var, band, fill = nScaled)) +
   geom_tile() +
   theme_bw() + 
   labs(x = "",
        y = "Bandwitdh (km)",
-       fill = "% included") +
-  scale_fill_viridis_c()
+       fill = "% included\n in final model") +
+  scale_x_discrete(labels = labVars) +
+  # make labels a bit easier
+  scale_fill_viridis_c(limits = round(c(min(modSumsTot$nScaled), 
+                                        max(modSumsTot$nScaled)),
+                                      1),
+                       breaks = round(seq(min(modSumsTot$nScaled), 
+                                          max(modSumsTot$nScaled), 
+                                          length.out = 5),
+                                      1),
+                       # adding % to the end of the label
+                       labels = function(x) paste0(x, "%")) +
+  # adjust the legend and axis labels to be nicer
+  theme(axis.text.x = element_text(hjust = 0.76),
+        legend.title = element_text(margin = margin(b = 10)))
 
-  
+# save
+ggsave("figS2.jpeg",
+       spatPlotFull, 
+       dpi = 300)
 
 
-
-
+################ final plots for reporting ################ 
 # get only the models without square terms for reporting
 modSumsVis <- modSums %>% select(!contains("_sq"))
 modFeVis <- modFE %>% filter(!str_detect(mod, "_sq"))
