@@ -666,10 +666,11 @@ fullFixedSummary <- modFE %>%
                                          "T", "T^2"))) %>% 
   arrange(var)
 
+# make a bit more presentable
 colnames(fullFixedSummary) <- c("", "# Total Models", 
                                 "# Times Significant (Overall)",
                                 "# Times Significant (with Squared Term)")
-
+# save
 write_csv(fullFixedSummary, "tableS4.csv")
 
 # check the full bandwidth results
