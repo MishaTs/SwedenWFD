@@ -657,11 +657,15 @@ fullFixedSummary <- modFE %>%
   mutate(var = var %>% str_replace_all("waterDepthMa$", "waterDepthMax") %>% 
            str_replace_all("waterDepthMa_", "waterDepthMax_"),
          containsSq = str_detect(mod, paste0(var, "_sq")),
-         isSigWith = as.numeric(isSig & containsSq)) %>%
+         isSigWith = as.numeric(isSig & containsSq),
+         isPos = as.numeric(coef > 0),
+         isPosWith = as.numeric(isPos & containsSq)) %>%
   summarise(.by = var,
             n = n(),
             nSig = sum(isSig),
-            nSigWith = sum(isSigWith)) %>% 
+            nSigWith = sum(isSigWith),
+            pPos = round(sum(isPos)/sum(isPos + isNeg)*100, 0),
+            pPosWith = round(sum(isPosWith)/sum(isPosWith + isNegWith) * 100, 0)) %>% 
   mutate(var = var %>% 
            str_replace_all("waterDepthMax", "Depth") %>% 
            str_replace_all("Tot_P", "TP") %>% 
@@ -679,7 +683,9 @@ fullFixedSummary <- modFE %>%
 # make a bit more presentable
 colnames(fullFixedSummary) <- c("", "# Total Models", 
                                 "# Times Significant (Overall)",
-                                "# Times Significant (with Squared Term)")
+                                "# Times Significant (with Squared Term)",
+                                "% Positive (Overall)",
+                                "% Positive (with Squared Term)")
 # save
 write_csv(fullFixedSummary, "tableS4.csv")
 
