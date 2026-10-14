@@ -157,8 +157,8 @@ nullResults <- seFin %>%
 residFit <- ggplot(nullResults, aes(x = predRich, y = rawResid)) + 
   geom_point() +
   theme_bw() +
-  labs(x = "Error",
-       y = "Predicted richness")
+  labs(x = "Predicted richness",
+       y = "Error")
 
 # temporal sensitivity
 residTemp <- ggplot(nullResults, aes(x = samplingYr, y = rawResid)) + 
@@ -376,7 +376,17 @@ for(i in 1:length(varComb)){
 
 cleanSubsetSum <- subsetSum %>% 
   group_by(across(all_of(colnames(subsetSum %>% select(-mod))))) %>% 
-  slice_max(nchar(mod), n = 1)
+  slice_max(nchar(mod), n = 1) %>% 
+  mutate(minBand = round(minBand/1000, 2),
+         maxBand = round(maxBand/1000, 2),
+         mod = mod %>% str_replace_all(";", "; "),
+         modCorr = modCorr %>% round(5),
+         bandDiff = bandDiff %>% round(2),
+         r2 = r2 %>% round(3),
+         rmse = rmse %>% round(3),
+         mae = mae %>% round(3)) %>% 
+  arrange(desc(modCorr)) %>% 
+  relocate(c(mod, n, modCorr))
 
 # export for writing
 write.csv(cleanSubsetSum,
