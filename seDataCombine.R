@@ -334,5 +334,14 @@ cowplot::save_plot("fig2.jpeg", sumGrid,
 ########################### extra reporting stuff ###########################
 # mostly just for reporting about programme names for the manuscript
 # docs at https://www.slu.se/om-slu/organisation/institutioner/vatten-miljo/datavardskap/registersida/
-table(seFinPlot$inFilt, seFinPlot$subProgramName)
-table(seFinPlot$subProgramName, seFinPlot$county)
+seMoni <- seFin %>% filter(!is.na(Abs_F420) | 
+                             !is.na(Alk) | 
+                             !is.na(Kfyll) | 
+                             !is.na(pH) | 
+                             !is.na(Temp) | 
+                             !is.na(TN) | 
+                             !is.na(TOC) | 
+                             !is.na(Tot_P))
+table(seMoni$subProgramName)
+table(seFin$subProgramName)
+table(seFin$subProgramName, seFin$county)
