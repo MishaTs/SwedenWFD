@@ -4,10 +4,15 @@
 .RData
 .Ruserdata
 *.Rproj
+*.rds
 
 # other file types
 *.zip
 *.jpeg
+# raw data files
+se*.csv
+# output tables
+table*.csv
 
 # Apple folder formatting
 **/.DS_Store

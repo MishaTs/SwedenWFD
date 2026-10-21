@@ -57,44 +57,36 @@ From this, we got 425 Swedish WFD sampling sites between 2007 and 2024 with reco
 
 Code was most recently run in the below environment.
 ```
-R version 4.5.2 (2025-10-31 ucrt)
-Platform: x86_64-w64-mingw32/x64
-Running under: Windows 11 x64 (build 26200)
+R version 4.6.1 (2026-06-24)
+Platform: aarch64-apple-darwin23
+Running under: macOS Golden Gate 27.0
 
 Matrix products: default
-  LAPACK version 3.12.1
+BLAS:
+LAPACK: LAPACK version 3.12.1
 
 attached base packages:
-[1] stats     graphics  grDevices utils     datasets  methods   base     
+[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
 
 other attached packages:
- [1] here_1.0.2         readxl_1.4.5       jsonlite_2.0.0    
- [4] httr_1.4.7         ggpattern_1.3.1    sf_1.0-22         
- [7] viridis_0.6.5      viridisLite_0.4.2  ggcorrplot_0.1.4.1
-[10] spCF_0.1.1         lubridate_1.9.4    forcats_1.0.1     
-[13] stringr_1.6.0      dplyr_1.2.1        purrr_1.2.0       
-[16] readr_2.1.6        tidyr_1.3.1        tibble_3.3.0      
-[19] ggplot2_4.0.3      tidyverse_2.0.0    devtools_2.4.6    
-[22] usethis_3.2.1     
+ [1] patchwork_1.3.2   biscale_1.1.0     ggpattern_1.3.1   sf_1.1-3          viridis_0.6.5    
+ [6] viridisLite_0.4.3 ggcorrplot_0.3.0  spCF_0.2.2        lubridate_1.9.5   forcats_1.0.1    
+[11] stringr_1.6.0     dplyr_1.2.1       purrr_1.2.2       readr_2.2.0       tidyr_1.3.2      
+[16] tibble_3.3.1      ggplot2_4.0.3     tidyverse_2.0.0  
 
 loaded via a namespace (and not attached):
- [1] dotCall64_1.2      gtable_0.3.6       spam_2.11-1       
- [4] remotes_2.5.0      lattice_0.22-7     tzdb_0.5.0        
- [7] vctrs_0.7.3        tools_4.5.2        generics_0.1.4    
-[10] proxy_0.4-27       pkgconfig_2.0.3    Matrix_1.7-4      
-[13] KernSmooth_2.23-26 RColorBrewer_1.1-3 S7_0.2.1          
-[16] lifecycle_1.0.5    compiler_4.5.2     farver_2.1.2      
-[19] FNN_1.1.4.1        fields_17.1        maps_3.4.3        
-[22] class_7.3-23       pillar_1.11.1      nloptr_2.2.1      
-[25] ellipsis_0.3.2     classInt_0.4-11    cachem_1.1.0      
-[28] dbscan_1.2.4       sessioninfo_1.2.3  tidyselect_1.2.1  
-[31] stringi_1.8.7      rprojroot_2.1.1    fastmap_1.2.0     
-[34] grid_4.5.2         cli_3.6.5          magrittr_2.0.4    
-[37] pkgbuild_1.4.8     e1071_1.7-16       withr_3.0.2       
-[40] scales_1.4.0       timechange_0.3.0   gridExtra_2.3     
-[43] cellranger_1.1.0   ranger_0.17.0      hms_1.1.4         
-[46] memoise_2.0.1      rlang_1.2.0        Rcpp_1.1.0        
-[49] glue_1.8.0         DBI_1.2.3          pkgload_1.4.1     
-[52] rstudioapi_0.17.1  R6_2.6.1           fs_1.6.6          
-[55] units_1.0-0
+ [1] dotCall64_1.2      gtable_0.3.6       spam_2.11-4        gridpattern_1.4.2  tzdb_0.5.0        
+ [6] vctrs_0.7.3        tools_4.6.1        generics_0.1.4     parallel_4.6.1     proxy_0.4-29      
+[11] pkgconfig_2.0.3    KernSmooth_2.23-26 RColorBrewer_1.1-3 S7_0.2.2           lifecycle_1.0.5   
+[16] compiler_4.6.1     farver_2.1.2       FNN_1.1.4.1        textshaping_1.0.5  fields_17.3       
+[21] terra_1.9-50       codetools_0.2-20   maps_3.4.3         class_7.3-23       pillar_1.11.1     
+[26] nloptr_2.2.1       crayon_1.5.3       classInt_0.4-11    cachem_1.1.0       dbscan_1.2.7      
+[31] tidyselect_1.2.1   stringi_1.8.9      reshape2_1.4.5     labeling_0.4.3     fastmap_1.2.0     
+[36] cowplot_1.2.0      rprojroot_2.1.1    khroma_1.17.0      geodata_0.6-9      here_1.0.2        
+[41] cli_3.6.6          magrittr_2.0.5     utf8_1.2.6         e1071_1.7-17       withr_3.0.3       
+[46] scales_1.4.0       rappdirs_0.3.4     bit64_4.8.6        timechange_0.4.0   bit_4.6.0         
+[51] otel_0.2.0         gridExtra_2.3.1    ragg_1.5.2         hms_1.1.4          memoise_2.0.1     
+[56] rlang_1.3.0        Rcpp_1.1.2         glue_1.8.1         DBI_1.3.0          pkgload_1.5.3     
+[61] rstudioapi_0.19.0  vroom_1.7.1        plyr_1.8.9         R6_2.6.1           systemfonts_1.3.2 
+[66] units_1.0-1 
 ```

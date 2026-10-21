@@ -133,7 +133,7 @@ seChemFin <- seCompChem %>%
 
 # import Murphy list from https://ars.els-cdn.com/content/image/1-s2.0-S0304377019300300-mmc2.xlsx
 # citation from https://doi.org/10.1016/j.aquabot.2019.06.006
-murphyListRaw <- read_excel("MacrophyteCFGLMM/1-s2.0-S0304377019300300-mmc2.xlsx", 
+murphyListRaw <- read_excel("1-s2.0-S0304377019300300-mmc2.xlsx", 
                             sheet = "world", range = "A2:K3460")
 murphyListHelper <- murphyListRaw %>% 
   # get just species-level, not subspecies or variant
@@ -154,6 +154,23 @@ macroMasterList <- unique(c(murphyListHelper$origClean,
 seMacroNames <- colnames(seSpecImp %>% select(`Acorus calamus`:`Zygnemataceae`))
 # now get our unique species names in the Murphy list
 seMacroMurphy <- intersect(macroMasterList, seMacroNames)
+
+# get these to exportable form
+seMacroExport <- seSpecImp %>% 
+  # get all column names
+  select(`Acorus calamus`:`Zygnemataceae`) %>% 
+  # remove those there everything is 0
+  select(where(~ any(. != 0))) %>% 
+  colnames() %>% 
+  data.frame() %>% 
+  # make alphabetical
+  arrange(`.`) %>% 
+  # check if Murphy
+  mutate(isMurphy = as.numeric(`.` %in% seMacroMurphy))
+
+# export for supplement
+write_csv(seMacroExport, "tableS1.csv")
+  
 
 # first, get "true" richness by converting everything to 0/1
 seSpecProc <- seSpecImp %>% 
@@ -192,7 +209,7 @@ library(sf)
 # edit the model for descriptive plotting
 seFinPlot <- seFin %>% 
   mutate(inFilt = case_when(
-    is.na(Tot_P) + is.na(TN) + is.na(Temp) == 0 ~ 1,
+    is.na(pH) + is.na(Temp) + is.na(TN) + is.na(TOC) + is.na(Tot_P) + is.na(waterDepthMax) == 0 ~ 1,
     .default = 0
   ))
 
@@ -216,7 +233,7 @@ seMap <- st_as_sf(seMap, crs = 4326) %>% st_transform(crs = 3009)
 # spatially plot richness
 richPlot <- ggplot() + 
   geom_sf(data = seMap) +
-  geom_sf(data = seGeo, aes(colour = rich,
+  geom_sf(data = seGeo, aes(colour = maxRich,
                             shape = factor(inFilt,
                                            levels = c(1, 0),
                                            labels = c("Yes", "No")))) +
@@ -301,7 +318,7 @@ sumGrid <- cowplot::plot_grid(richPlot,
   cowplot::draw_plot(biLeg, 0.855, .0545, 0.1, 0.12)
 
 # save plot
-cowplot::save_plot("MacrophyteCFGLMM/fig4.jpeg", sumGrid, 
+cowplot::save_plot("fig2.jpeg", sumGrid, 
                    nrow = 1,
                    base_height = 5,
                    base_asp = 2.2,
@@ -317,5 +334,14 @@ cowplot::save_plot("MacrophyteCFGLMM/fig4.jpeg", sumGrid,
 ########################### extra reporting stuff ###########################
 # mostly just for reporting about programme names for the manuscript
 # docs at https://www.slu.se/om-slu/organisation/institutioner/vatten-miljo/datavardskap/registersida/
-table(seFinPlot$inFilt, seFinPlot$subProgramName)
-table(seFinPlot$subProgramName, seFinPlot$county)
+seMoni <- seFin %>% filter(!is.na(Abs_F420) | 
+                             !is.na(Alk) | 
+                             !is.na(Kfyll) | 
+                             !is.na(pH) | 
+                             !is.na(Temp) | 
+                             !is.na(TN) | 
+                             !is.na(TOC) | 
+                             !is.na(Tot_P))
+table(seMoni$subProgramName)
+table(seFin$subProgramName)
+table(seFin$subProgramName, seFin$county)

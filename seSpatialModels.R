@@ -1,5 +1,7 @@
 ########################### preparation ###########################
 library(tidyverse)
+# if default install gives wrong version, verify using direct v0.2.2 install
+# pak::pak("spCF@0.2.2")
 library(spCF)
 library(stringr)
 #library(fastDummies)
@@ -19,22 +21,22 @@ corrPlot <- ggcorrplot(cor(seFin %>%
                           "samplingM",
                           "samplingSiteX",
                           "samplingSiteY",
-                          "rich",
+                          "maxRich",
+                          "murphyRich",
                           "tmiRich",
                           "tmi",
-                          "murphyRich",
-                          "maxRich",
-                          "observationCount")) %>% 
+                          "observationCount",
+                          "waterDepthMax")) %>% 
                    rename(Year = "samplingYr",
                           Month = "samplingM",
                           X = "samplingSiteX",
                           Y = "samplingSiteY",
-                          Richness = "rich",
+                          `Full Richness` = "maxRich",
+                          `Murphy Richness` = "murphyRich",
                           `TMI Richness` = "tmiRich",
                           TMI = "tmi",
-                          `Murphy Richness` = "murphyRich",
-                          `Full Richness` = "maxRich",
-                          Count = "observationCount")),
+                          Count = "observationCount",
+                          `Survey Depth` = "waterDepthMax")),
            type = "upper",
            lab = TRUE,
            digits = 2) +
@@ -53,13 +55,14 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                           "samplingM",
                           "samplingSiteX",
                           "samplingSiteY",
-                          "rich",
+                          "maxRich",
+                          "murphyRich",
                           "tmiRich",
                           "tmi",
-                          "murphyRich",
-                          "maxRich",
                           "observationCount",
+                          "waterDepthMax",
                           "Alk",
+                          "Abs_F420",
                           "Kfyll",
                           "Kond_25",
                           "TOC",
@@ -69,20 +72,21 @@ corrPlotFull <- ggcorrplot(cor(seFin %>%
                           "TN")) %>% 
                    relocate(c(samplingM, samplingYr,
                               samplingSiteX, samplingSiteY,
-                              rich, murphyRich, maxRich, tmiRich, tmi,
-                              observationCount,
-                              Alk, Kfyll, Kond_25, TOC, pH,
+                              maxRich, murphyRich, tmiRich, tmi,
+                              observationCount, waterDepthMax,
+                              Abs_F420, Alk, Kfyll, Kond_25, TOC, pH,
                               Tot_P, Temp, TN)) %>% 
                           rename(Year = "samplingYr",
                                  Month = "samplingM",
                                  X = "samplingSiteX",
                                  Y = "samplingSiteY",
-                                 `WFD Richness` = "rich",
+                                 `Full Richness` = "maxRich",
+                                 `Murphy Richness` = "murphyRich",
                                  `TMI Richness` = "tmiRich",
                                  TMI = "tmi",
-                                 `Murphy Richness` = "murphyRich",
-                                 `Full Richness` = "maxRich",
                                  `# Obs` = "observationCount",
+                                 `Survey Depth` = "waterDepthMax",
+                                 Absorbance = "Abs_F420",
                                  Alkalinity = "Alk",
                                  `Chlorophyl-a` = "Kfyll",
                                  Conductivity = "Kond_25",
@@ -120,14 +124,14 @@ x <- seFin %>% select(c(samplingYr)) %>%
   #           remove_first_dummy = TRUE) %>% 
   #select(-samplingYr) %>% 
   as.matrix()
-y <- seFin %>% pull(rich)
+y <- seFin %>% pull(maxRich)
 offset <- seFin %>% pull(observationCount)
 
 # fit the basic, full model with holdout validation
 mod_hv <- cf_glm_hv(y = y, #x = x, 
                     #offset = offset, # looks like model doesn't find suitable coefficients with offset
                     coords = coords, 
-                    family=poisson()) # poisson and quasipoisson are identical
+                    family = negbin())
 
 # then train the full model using the cf_glm function
 mod <- cf_glm(y = y, #x = x, 
@@ -147,14 +151,14 @@ nullResults <- seFin %>%
     mod$pred$pred_sd) %>% 
   rename(predRich = `...39`,
          predSd = `...40`) %>% 
-  mutate(rawResid = rich - predRich)
+  mutate(rawResid = maxRich - predRich)
 
 # residuals vs fitted
 residFit <- ggplot(nullResults, aes(x = predRich, y = rawResid)) + 
   geom_point() +
   theme_bw() +
-  labs(x = "Error",
-       y = "Predicted richness")
+  labs(x = "Predicted richness",
+       y = "Error")
 
 # temporal sensitivity
 residTemp <- ggplot(nullResults, aes(x = samplingYr, y = rawResid)) + 
@@ -182,7 +186,11 @@ residSpat <- ggplot() +
   geom_sf(data = seMap) +
   geom_sf(data = nullSpatial, aes(colour = rawResid)) +
   theme_bw() +
-  scale_colour_viridis_c() +
+  scale_colour_gradientn(
+    colours = khroma::color("managua")(256),
+    rescaler = ~ scales::rescale_mid(., mid = 0),
+    limits = range(nullPlot$rawResid, na.rm = TRUE)
+  ) + 
   labs(colour = "Error")
 
 # format plots in replicable cowplot format
@@ -197,18 +205,23 @@ resids <- cowplot::plot_grid(residFit,
                              label_size = 12,
                              nrow = 2,
                              align = "h") 
-cowplot::save_plot("fig6.jpeg", resids, 
+cowplot::save_plot("fig4.jpeg", resids, 
                    nrow = 2,
                    dpi = 300,
                    base_width = 7)
 
-
 ############### spatial feature extraction ############### 
 # we can (and should) change the bandwidth on these to reflect the model results
 # can then extract the specific preditive means for just those bandwidth features of a certain scale
-mod_s1 <- sp_scalewise(mod,bw_range=c(100000,Inf)) # Large scale (100+ km), 15 scales - 1
-mod_s2 <- sp_scalewise(mod,bw_range=c(10000,100000)) # medium scale (10-100 km), 21 scales - 2
-mod_s3 <- sp_scalewise(mod,bw_range=c(0,10000)) # medium scale (under 10 km), 14 scales - 2
+# so, split the null model bands into three equal groups for decomposition
+bandSplit <- split(mod$bands, sort(rep_len(1:3, length(mod$bands))))
+bandCut1 <- mean(c(min(bandSplit$`1`), max(bandSplit$`2`))) %>% signif(digits = 1)
+bandCut2 <- mean(c(min(bandSplit$`2`), max(bandSplit$`3`))) %>% signif(digits = 1)
+
+# then cut the processes accordingly
+mod_s1 <- sp_scalewise(mod,bw_range=c(bandCut1, Inf)) # Large scale
+mod_s2 <- sp_scalewise(mod,bw_range=c(bandCut2, bandCut1)) # medium scale
+mod_s3 <- sp_scalewise(mod,bw_range=c(0, bandCut2)) # medium scale
 
 nullPlot <- nullSpatial %>% 
   bind_cols(mod_s1$pred$pred,
@@ -221,17 +234,24 @@ nullPlot <- nullSpatial %>%
                names_to = "scale",
                values_to = "predSpat") %>% 
   mutate(scale = factor(scale,
-                        levels = c("small", "medium", "large")))
+                        levels = c("small", "medium", "large"),
+                        labels = c("Small", "Intermediate", "Large")))
 
 spatDecompPlot <- ggplot() + 
   geom_sf(data = seMap) +
-  geom_sf(data = nullPlot, aes(colour = predSpat)) +
+  geom_sf(data = nullPlot, aes(colour = predSpat)) + 
+  #geom_sf(data = nullPlot, shape = 21, colour = "black", alpha = 0.3) +
   theme_bw() +
-  scale_colour_viridis_c() +
+  # rescale the palette around 0, which is darker
+  scale_colour_gradientn(
+    colours = khroma::color("managua")(256),
+    rescaler = ~ scales::rescale_mid(., mid = 0),
+    limits = range(nullPlot$predSpat, na.rm = TRUE)
+  ) + 
   facet_wrap(~scale) +
   labs(colour = "Adjustment \nfrom baseline")
 
-ggsave("fig5.jpeg", 
+ggsave("fig3.jpeg", 
        spatDecompPlot,
        width = 24,
        height = 17,
@@ -239,67 +259,198 @@ ggsave("fig5.jpeg",
        #scale = 1,
        dpi = 300)
 
+############### spatial process checks ############### 
+# the goal here is to find the covariates that distort the spatial process the least
+# we evaluate these by 4 metrics: (1) min, (2) max bandwidth
+# (3) average distance between bandwidth
+# (4) correlation between current model predictions and those of the null model
+
+# save the model output
+nullResRef <- nullResults %>% 
+  select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
+  # rename to simplify things later
+  rename(predRichF = "predRich",
+         predSdF = "predSd")
+
+# first, get these for the null model
+subsetSum <- data.frame(
+  # number of observations
+  n = nrow(nullResRef),
+  # min bandwidth
+  minBand = min(mod$bands), 
+  # max bandwidth
+  maxBand = max(mod$bands), 
+  # number of unique bands
+  nBand = length(mod$bands),
+  # geometric average difference between bands
+  # geometric mean because of the non-linear scaling of band increases
+  bandDiff = mod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
+  # correlation between predicted values
+  modCorr = cor(nullResRef$predRichF, nullResRef$predRichF),
+  # predictive score metrics
+  r2 = mod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
+  rmse = mod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
+  mae = mod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
+  # model name
+  mod = "Full"
+)
+
+# get a list of all unique covariate combinations
+varList <- c("secchi", "waterDepthMax", "Abs_F420",
+             "Alk", "Kfyll", "Kond_25", "TOC", "Tot_P",
+             "Temp", "pH", "TN") %>% sort()
+
+varComb <- combinations <- unlist(
+  lapply(1:length(varList), function(i) {
+    combn(varList, i, simplify = FALSE)
+  }), 
+  recursive = FALSE
+)
+
+# build helper function to get all the output
+# variables must be vector of strings
+getModSum <- function(variables){
+  seFilt <- seFin %>% select(all_of(c("samplingSiteX", "samplingSiteY", "maxRich",
+                                      # ID info for later
+                                      "samplingYr", "samplingSiteId",
+                                      variables))) %>% 
+    drop_na()
+  # specify model elements separately
+  coordsTest <- seFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
+  yTest <- seFilt %>% pull(maxRich)
+  
+  # fit the basic, full model with holdout validation
+  test_hv <- cf_glm_hv(y = yTest,
+                       coords = coordsTest, 
+                       family=negbin()) %>% 
+    # quiet the output
+    suppressMessages()
+  
+  # then train the full model using the cf_glm function
+  testMod <- cf_glm(y = yTest,
+                    coords = coordsTest, mod_hv = test_hv) %>% 
+    # quiet the output
+    suppressMessages()
+  
+  testRes <- seFilt %>% 
+    # select bare minimum for consistent column numbers
+    select("samplingSiteX", "samplingSiteY", "maxRich",
+           "samplingYr", "samplingSiteId") %>% 
+    bind_cols(
+      testMod$pred$pred, # Predictive mean
+      testMod$pred$pred_sd # Predictive SD
+    ) %>% 
+    rename(predRich = `...6`,
+           predSd = `...7`) %>% 
+    select(c("samplingYr", "samplingSiteId", "predRich", "predSd")) %>% 
+    left_join(nullResRef, by = c("samplingYr", "samplingSiteId")) %>% 
+    # quiet the output
+    suppressMessages()
+  
+  # do the same summary as before
+  return(
+    data.frame(
+      n = nrow(testRes),
+      minBand = min(testMod$bands),
+      maxBand = max(testMod$bands),
+      nBand = length(testMod$bands),
+      bandDiff = testMod$bands %>% sort() %>% diff() %>% log() %>% mean() %>% exp(),
+      modCorr = cor(testRes$predRich, testRes$predRichF),
+      r2 = testMod$e_summary %>% filter(str_detect(stat, "R2")) %>% pull(value),
+      rmse = testMod$e_summary %>% filter(str_detect(stat, "RMSE")) %>% pull(value),
+      mae = testMod$e_summary %>% filter(str_detect(stat, "MAE")) %>% pull(value),
+      mod = paste(variables, collapse = ";")
+    ) %>% 
+      # quiet the output
+      suppressMessages()
+  )
+}
+
+for(i in 1:length(varComb)){
+  invisible({capture.output({
+    tempSum <- getModSum(varComb[[i]])
+  })})
+  # combine with total summary
+  subsetSum <- subsetSum %>% bind_rows(tempSum)
+}
+
+cleanSubsetSum <- subsetSum %>% 
+  group_by(across(all_of(colnames(subsetSum %>% select(-mod))))) %>% 
+  slice_max(nchar(mod), n = 1) %>% 
+  mutate(minBand = round(minBand/1000, 2),
+         maxBand = round(maxBand/1000, 2),
+         mod = mod %>% str_replace_all(";", "; "),
+         modCorr = modCorr %>% round(5),
+         bandDiff = bandDiff %>% round(2),
+         r2 = r2 %>% round(3),
+         rmse = rmse %>% round(3),
+         mae = mae %>% round(3)) %>% 
+  arrange(desc(modCorr)) %>% 
+  relocate(c(mod, n, modCorr))
+
+# export for writing
+write.csv(cleanSubsetSum,
+          "tableS2.csv")
 
 ########################### filter w/ chemistry data ###########################
-
 # re-run with just water sites with water chemistry data
 # method is sensitive to NAs which must be removed
-
-# summarise all NA values again
-View(
-  seFin %>% ungroup() %>% 
-    summarise(across(everything(), ~ sum(is.na(.))))
-)
-# filter only for values not NA in a few values
-seFinFilt <- seFin %>% drop_na(any_of(c(#"secchi", # missing values here are different from the chem
-  #"Abs_F420", # drops R2 to 74%
+# filter only for values not NA in selected variables
+# done manually but these can be found in entry 3 of cleanSubsetSum
+# pH;Temp;TN;TOC;Tot_P;waterDepthMax
+seFinFilt <- seFin %>% drop_na(any_of(c(
+  #"secchi",
+  #"Abs_F420",
   #"Alk",
   #"Kfyll",
   #"Kond_25",
-  #"TOC", # drops R2 to 63%
-  "Tot_P",
+  "pH",
   "Temp",
-  #"pH",
-  "TN"))) %>% 
+  "TN",
+  "TOC",
+  "Tot_P",
+  "waterDepthMax"))) %>% 
   select(-c("secchi",
             "Abs_F420",
             "Alk",
             "Kfyll",
             "Kond_25",
-            "TOC",
+            #"TOC",
             #"Tot_P",
             #"Temp",
-            "pH",
-            #"TN"
+            #"pH",
+            #"TN",
+            #"waterDepthMax"
   )) %>% 
-  mutate(TPsq = Tot_P^2,
-         Tsq = Temp^2,
-         TNsq = TN^2)
+  mutate(
+    pH_sq = pH^2,
+    Temp_sq = Temp^2,
+    TN_sq = TN^2,
+    TOC_sq = TOC^2,
+    Tot_P_sq = Tot_P^2,
+    waterDepthMax_sq = waterDepthMax^2
+  )
 
 # prepare data for package
 coordFilt <- seFinFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
-yFilt <- seFinFilt %>% pull(rich)
-# for later test
-#offsetFilt <- seFinFilt %>% pull(observationCount)
+yFilt <- seFinFilt %>% pull(maxRich)
 
-
+# fit the null model again
 nullFiltHV <- cf_glm_hv(y = yFilt,
                         coords = coordFilt, 
-                        family = poisson()) # poisson and quasipoisson are identical
+                        family = negbin())
 nullFilt <- cf_glm(y = yFilt,
                    coords = coordFilt, 
                    mod_hv = nullFiltHV)
-# model when filtering only for all rows with some chem value is horrible
-# best R2 at 85,6% when we have TN, Temp, and TP
-nullFilt
 
+# general inspection
+#nullFilt
 # spatial trends are in
-nullFilt$bands
+#nullFilt$bands
 # covariates are in nullFilt$beta
-nullFilt$beta
+#nullFilt$beta
 # summary statistics in
-nullFilt$e_summary
-
+#nullFilt$e_summary
 
 # basic residuals check
 nullFiltResults <- seFinFilt %>% 
@@ -307,27 +458,28 @@ nullFiltResults <- seFinFilt %>%
     nullFilt$pred$pred, 
     # Predictive SD
     nullFilt$pred$pred_sd) %>% 
-  rename(predRich = `...35`,
-         predSd = `...36`) %>% 
-  mutate(rawResid = rich - predRich)
+  rename(predRich = `...40`,
+         predSd = `...41`) %>% 
+  mutate(rawResid = maxRich - predRich)
 
 
 # residuals vs fitted
-# clearly some misfit with more extreme underpredictions as predicted richness increases
+# more systematic overprediction than underprediction but nothing else really?
 ggplot(nullFiltResults, aes(x = predRich, y = rawResid)) + geom_point()
-# absolutely lethal misfit for total and just TN data
-# true richness vs residual
-ggplot(nullFiltResults, aes(x = rich, y = rawResid)) + geom_point()
+# absolutely lethal misfit where residuals  increase as richness increases
+# this is pretty typical for a misfit model and not uniquely horrible
+ggplot(nullFiltResults, aes(x = maxRich, y = rawResid)) + geom_point()
 
 # temporal sensitivity
-# missing a few years later
+# middle years are especially undersampled but nothing structural
 ggplot(nullFiltResults, aes(x = samplingYr, y = rawResid)) + geom_point()
 
 # spatial sensitivity
 nullFiltSpatial <- st_as_sf(nullFiltResults, 
                             coords = c("samplingSiteX", "samplingSiteY"), 
                             crs = 3006)
-# all majorly concerning residuals situated in eastern Svealand, southern coast, or extreme northwest
+# nothing hugely concerning spatially
+# slightly higher errors in the mountains and around cities but nothing huge
 ggplot() + 
   geom_sf(data = seMap) +
   geom_sf(data = nullFiltSpatial, aes(colour = rawResid)) +
@@ -335,25 +487,26 @@ ggplot() +
   scale_colour_viridis_c() +
   labs(colour = "Raw residuals")
 
-
-
-
-
 ########################### manual chem model dredge ###########################
 
 # explore the variety of combined models
 # helper function to run things faster
 runQuickCF <- function(covList) {
   coordFilt <- seFinFilt %>% select(c(samplingSiteX, samplingSiteY)) %>% as.matrix()
-  yFilt <- seFinFilt %>% pull(rich)
+  yFilt <- seFinFilt %>% pull(maxRich)
   xFilt <- seFinFilt %>% select(all_of(covList)) %>% as.matrix()
   
   modHV <- cf_glm_hv(y = yFilt, x = xFilt, 
                      coords = coordFilt, 
-                     family = poisson()) # poisson and quasipoisson are identical
+                     family = negbin()) %>% 
+    # silence output
+    suppressMessages()
+  
   modFit <- cf_glm(y = yFilt, x = xFilt, 
                    coords = coordFilt, 
-                   mod_hv = modHV)
+                   mod_hv = modHV) %>% 
+    suppressMessages()
+  
   return(modFit)
 }
 
@@ -363,7 +516,9 @@ modSums <- data.frame(band = nullFiltHV$other$bands_all)
 # add null model
 modSums <- modSums %>% 
   mutate(Null = case_when(
-    band %in% nullFilt$band ~ nullFilt$e_summary$value[1],
+    band %in% nullFilt$band ~ nullFilt$e_summary %>% 
+      filter(str_detect(stat, "R2")) %>% 
+      pull(value),
     .default = 0
   ))
 
@@ -375,61 +530,55 @@ modScores <- as.data.frame(nullFilt$e_summary) %>%
               values_from = value) %>% 
   mutate(mod = "Null")
 
-#full list of covariates
-covListFull <- c("TN",
-                 "Temp",
-                 "Tot_P",
-                 "TNsq",
-                 "Tsq",
-                 "TPsq")
-
+# finally the fixed effects
+# left empty because we don't care about the null model
 modFE = data.frame(#var = covListFull,
   coef = numeric(),
   isSig = numeric(),
   mod = character()
 )
 
-# fully enumerate all candidate wq models
-cov1 <- c("TN")
-cov2 <- c("Temp")
-cov3 <- c("Tot_P")
-cov4 <- c("TN", "TNsq")
-cov5 <- c("Temp", "Tsq")
-cov6 <- c("Tot_P", "TPsq")
-cov7 <- c("TN", "Temp")
-cov8 <- c("TN", "TNsq", "Temp")
-cov9 <- c("TN", "Temp", "Tsq")
-cov10 <- c("TN", "TNsq", "Temp", "Tsq")
+#get full list of covariates
+finVars <- c("pH",
+             "Temp",
+             "TN",
+             "TOC",
+             "Tot_P",
+             "waterDepthMax")
 
-cov11 <- c("Tot_P", "Temp")
-cov12 <- c("Tot_P", "TPsq", "Temp")
-cov13 <- c("Tot_P", "Temp", "Tsq")
-cov14 <-  c("Tot_P", "TPsq", "Temp", "Tsq")
+# generate a matrix of states to simplify computation, where
+# 0 = omit; 1 = incl linear term only; 2 = incl linear & sqare terms
+varsGrid <- expand.grid(rep(list(0:2), length(finVars)))
 
-cov15 <- c("TN", "Tot_P")
-cov16 <- c("TN", "TNsq", "Tot_P")
-cov17 <- c("TN", "Tot_P", "TPsq")
-cov18 <- c("TN", "TNsq", "Tot_P", "TPsq")
-
-cov19 <- c("TN", "Temp", "Tot_P")
-cov20 <- c("TN", "TNsq", "Temp", "Tot_P")
-cov21 <- c("TN", "Temp", "Tsq", "Tot_P") 
-cov22 <- c("TN", "Temp", "Tot_P", "TPsq") 
-
-cov23 <- c("TN", "TNsq", "Temp", "Tsq", "Tot_P")
-cov24 <- c("TN", "TNsq", "Temp", "Tot_P", "TPsq")
-cov25 <- c("TN", "Temp", "Tsq", "Tot_P", "TPsq")
-cov26 <- c("TN", "TNsq", "Temp", "Tsq", "Tot_P", "TPsq")
+chemVarsList <- apply(varsGrid, # apply over the grid
+                      1, # for rows
+                      function(i) {
+                        unlist(Map(function(v, # for some variable
+                                            s) { # and for some state
+                          if (s == 0) {
+                            # include nothing
+                            return(NULL) 
+                          }
+                          else if (s == 1) {
+                            # include variable linearly
+                            return(v) 
+                          }
+                          else {
+                            # include variable linearly and as square
+                            c(v, paste0(v, "_sq")) 
+                          }
+                        }, finVars, i)) %>% 
+                          # remove element names
+                          unname() 
+                      })
 
 # loop through all our candidate sets
-for(i in 1:26){
+# start at 2 because 1 is our null model
+for(i in 2:length(chemVarsList)){
   # get the set of covariates we're working with now
-  # eval to parse for function use 
-  covVect <- eval(parse(text = paste0("cov",i)))
-  # silently run its model
-  invisible({capture.output({
-    modTemp <- runQuickCF(covVect)
-  })})
+  covVect <- chemVarsList[[i]]
+  # run the model
+  modTemp <- runQuickCF(covVect)
   # add to our temp spatial results vector
   modSums <- modSums %>% 
     mutate(tempBand = case_when(
@@ -443,8 +592,10 @@ for(i in 1:26){
   # get FE coefficients and significance
   # 1-variable case is a little different
   if(length(covVect) == 1){
-    feTemp <- modTemp$beta %>% rownames_to_column() %>% rename(var = "rowname") %>% 
-      filter(var == "x2") %>% 
+    feTemp <- modTemp$beta %>% 
+      # model output no longer provides any variable names
+      # assume that first row of the beta matrix is always the intercept
+      slice(-1) %>% 
       mutate(var = covVect[1],
              isSig = as.numeric(sign(lower_95CI) == sign(upper_95CI))) %>% 
       select(var, coef, isSig)
@@ -475,48 +626,238 @@ for(i in 1:26){
   modScores <- bind_rows(modScores, modScoreTemp)
 }
 
-########################### clean & plot results ###########################
+####################### clean & plot overall results #######################
+
+# clean up model scores
+modScoresExp <- modScores %>% 
+  # regex magic to clean things up
+  mutate(modClean = str_replace_all(mod,
+                                    # capture the complete second occurrence of a duplicate pair
+                                    # leaving the underscore suffix
+                                    "(^|;)([^;]+);(\\2(?:_\\d+)?)",
+                                    # using backreferences to 1st and 3rd groups (though 3rd never exists)
+                                    "\\1\\3") %>% 
+           str_replace_all(";", " + ") %>% 
+           str_replace_all("_sq", "^2") %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth")
+         ) %>% 
+  select(-mod) %>% 
+  relocate(modClean) %>% 
+  mutate(across(where(is.numeric), ~round(., 7)))
+
+# save for manuscript
+# some weird floating point issues with long training 00000000003 but it's fine
+write_csv(modScoresExp, "tableS3.csv")
+
+# check the full FE numbers
+fullFixedSummary <- modFE %>% 
+  filter(var != "Intercept") %>%
+  mutate(var = var %>% str_replace_all("waterDepthMa$", "waterDepthMax") %>% 
+           str_replace_all("waterDepthMa_", "waterDepthMax_"),
+         containsSq = str_detect(mod, paste0(var, "_sq")),
+         isSigWith = as.numeric(isSig & containsSq),
+         isPos = as.numeric(coef > 0),
+         isPosWith = as.numeric(isPos & containsSq)) %>%
+  summarise(.by = var,
+            n = n(),
+            nSig = sum(isSig),
+            nSigWith = sum(isSigWith),
+            pPos = round(sum(isPos)/sum(isPos + isNeg)*100, 0),
+            pPosWith = round(sum(isPosWith)/sum(isPosWith + isNegWith) * 100, 0)) %>% 
+  mutate(var = var %>% 
+           str_replace_all("waterDepthMax", "Depth") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("_sq", "^2"),
+         # set as factor for ordering
+         var = var %>% factor(levels = c("Depth", "Depth^2",
+                                         "pH", "pH^2",
+                                         "TN", "TN^2",
+                                         "TOC", "TOC^2",
+                                         "TP", "TP^2",
+                                         "T", "T^2"))) %>% 
+  arrange(var)
+
+# make a bit more presentable
+colnames(fullFixedSummary) <- c("", "# Total Models", 
+                                "# Times Significant (Overall)",
+                                "# Times Significant (with Squared Term)",
+                                "% Positive (Overall)",
+                                "% Positive (with Squared Term)")
+# save
+write_csv(fullFixedSummary, "tableS4.csv")
+
+# check the full bandwidth results
+modSumsTot <- modSums %>% 
+  pivot_longer(!band,
+               names_to = "mod",
+               values_to = "r2") %>% 
+  # lazy regex to clean things up
+  mutate(pH = as.numeric(mod %>% str_detect("pH")),
+         pH_sq = as.numeric(mod %>% str_detect("pH_sq")),
+         Depth = as.numeric(mod %>% str_detect("waterDepthMa")),
+         Depth_sq = as.numeric(mod %>% str_detect("waterDepthMax_sq")),
+         TN = as.numeric(mod %>% str_detect("TN")),
+         TN_sq = as.numeric(mod %>% str_detect("TN_sq")),
+         Temp = as.numeric(mod %>% str_detect("Temp")),
+         Temp_sq = as.numeric(mod %>% str_detect("Temp_sq")),
+         TP = as.numeric(mod %>% str_detect("Tot_P")),
+         TP_sq = as.numeric(mod %>% str_detect("Tot_P_sq")),
+         TOC = as.numeric(mod %>% str_detect("TOC")),
+         TOC_sq = as.numeric(mod %>% str_detect("TOC_sq")),
+         nTerms = rowSums(across(-c("band", "mod", "r2")))
+         ) %>%
+  filter(r2 != 0) %>%
+  # pivoting here and back is the fastest way to process the data
+  pivot_longer(!c("band", "mod", "r2", "nTerms"),
+               names_to = "var",
+               values_to = "isInMod") %>% 
+  filter(isInMod != 0) %>% 
+  select(-isInMod) %>% 
+  # these sorts of summary statistics are only possible in long format
+  summarise(.by = c("band", "var"),
+            n = n(),
+            largestMod = max(nTerms),
+            bestMod = max(r2),
+            worstMod = min(r2)) %>% 
+  select(c("band", "var", "n")) %>% 
+  # then fix the units
+  mutate(band = as.factor(format(round(band/1000, 1), nsmall = 1))) %>%
+  pivot_wider(names_from = "var",
+              values_from = "n") %>% 
+  # assume NA means that the bandwidth wasn't found in the data
+  mutate(across(everything(), ~replace_na(., 0))) %>% 
+  pivot_longer(!band,
+               names_to = "var",
+               values_to = "n") %>%
+  # for scaling, use the previously-cleaned table
+  left_join(fullFixedSummary %>% 
+              select("var", "n") %>%
+              mutate(var = var %>% 
+                       str_replace_all("waterDepthMax", "Depth") %>% 
+                       str_replace_all("Tot_P", "TP")) %>% 
+              rename(nVar = "n"),
+            by = "var") %>%
+  mutate(nScaled = n/nVar*100,
+         var = var %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("_sq", "^2")) %>% 
+  # not sure why it doesn't work otherwise, but easiest to do it this way
+  rowwise() %>% 
+  mutate(labVar = list(bquote(phantom(x^2) * .(parse(text = var)[[1]])))) %>%
+  ungroup() %>% 
+  # order things manually to get as desired
+  mutate(var = var %>% factor(levels = c("Depth", "Depth^2",
+                                         "pH", "pH^2",
+                                         "TN", "TN^2",
+                                         "TOC", "TOC^2",
+                                         "TP", "TP^2",
+                                         "T", "T^2")))
+
+# fix the label ordering mismatch
+labVars <- modSumsTot$labVar
+names(labVars) <- as.character(modSumsTot$var)
+
+# rough plot for supplement of spatial patterns
+spatPlotFull <- ggplot(modSumsTot, aes(var, band, fill = nScaled)) +
+  geom_tile() +
+  theme_bw() + 
+  labs(x = "",
+       y = "Bandwitdh (km)",
+       fill = "% included\n in final model") +
+  scale_x_discrete(labels = labVars) +
+  # make labels a bit easier
+  scale_fill_viridis_c(limits = round(c(min(modSumsTot$nScaled), 
+                                        max(modSumsTot$nScaled)),
+                                      1),
+                       breaks = round(seq(min(modSumsTot$nScaled), 
+                                          max(modSumsTot$nScaled), 
+                                          length.out = 5),
+                                      1),
+                       # adding % to the end of the label
+                       labels = function(x) paste0(x, "%")) +
+  # adjust the legend and axis labels to be nicer
+  theme(axis.text.x = element_text(hjust = 0.76),
+        legend.title = element_text(margin = margin(b = 10)))
+
+# save
+ggsave("figS2.jpeg",
+       spatPlotFull, 
+       dpi = 300)
+
+
+################ final plots for reporting ################ 
+# get only the models without square terms for reporting
+modSumsVis <- modSums %>% select(!contains("_sq"))
+modFeVis <- modFE %>% filter(!str_detect(mod, "_sq"))
 
 # get the minimum distance for all columns
-minDist <- modSums %>%
+minDist <- modSumsVis %>%
   filter(if_any(-band, ~ . != 0)) %>%
   summarise(minDist = min(band)) %>%
   pull(minDist)
 
-# set clean model order for readability
-modelOrderClean <- str_replace_all(
-  str_replace_all(colnames(modSums)[-1],
-                  "Temp","T"),
-  "Tot_P","TP")
+# set clean model order for readability (first step)
+modelOrderClean <- colnames(modSumsVis)[-1] %>% 
+  str_replace_all("Temp", "T") %>% 
+  str_replace_all("Tot_P", "TP") %>% 
+  str_replace_all("waterDepthMax", "Depth")
 
 # format for plot
-modOrderLab <- str_replace_all(modelOrderClean, "sq", "(^2") %>% 
+modOrderLab <- modelOrderClean %>% 
+  # another regex to remove all the ; and duplicates with +
+  # kind of irrelevant now that there are no square terms but it's fine
+  str_replace_all("_sq", "(^2") %>% 
   str_remove_all("\\;[:alpha:]{1,2}\\(") %>%
   str_replace_all("\\;", " + ")
-  # probably a better way to do this, but this is fine
-  #str_replace_all("\\^", "\\(^")
 
-modPlot <- modSums %>% 
-  # remove all bandwidths below the minimum detection for all models
-  filter(band >= minDist) %>%
+# create manual ordering of the models and labels
+# to better accentuate pH and Depth patterns
+modelOrderFinal <- c(modelOrderClean %>% 
+                       as_tibble() %>% 
+                       filter(!str_detect(value, "pH")) %>% 
+                       pull(value),
+                     modelOrderClean %>% 
+                       as_tibble() %>% 
+                       filter(str_detect(value, "pH")) %>% 
+                       pull(value))
+modelLabelFinal <- c(modOrderLab %>% 
+                       as_tibble() %>% 
+                       filter(!str_detect(value, "pH")) %>% 
+                       pull(value),
+                     modOrderLab %>% 
+                       as_tibble() %>% 
+                       filter(str_detect(value, "pH")) %>% 
+                       pull(value))
+
+# further clean up bandwidths
+inclBands <- modSumsVis %>% 
+  mutate(r2Sum = rowSums(across(-band))) %>% 
+  filter(r2Sum > 0) %>% 
+  pull(band)
+
+modPlot <- modSumsVis %>% 
+  # remove all bandwidths not found in any visualised models
+  filter(band %in% inclBands) %>%
   # convert from m to km
   mutate(band = band/1000) %>% 
-  pivot_longer(cols = colnames(modSums)[-1],
+  pivot_longer(cols = colnames(modSumsVis)[-1],
                names_to = "modName",
                values_to = "R2") %>% 
   # make names more consistent & readable
-  mutate(modName = str_replace_all(modName,
-                                   "Tot_P",
-                                   "TP"),
-         # do this twice bc combining too much work
-         modName = str_replace_all(modName,
-                                   "Temp",
-                                   "T")) %>% 
+  mutate(modName = modName %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth")) %>% 
   # format factor levels manually to make plot more readable
   mutate(distance = as.factor(format(round(band, 1), nsmall = 1)),
          modName = factor(modName,
-                          levels = modelOrderClean,
-                          labels = modOrderLab))
+                          levels = modelOrderFinal,
+                          labels = modelLabelFinal),
+         R2 = R2 %>% na_if(0)) %>% 
+  filter()
 
 # plot
 spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
@@ -526,42 +867,34 @@ spatPlot <- ggplot(modPlot, aes(modName, distance, fill = R2)) +
        y = "Bandwitdh (km)",
        fill = bquote(R^2)) +
   # make limits & labels more readable
-  scale_fill_viridis_c(limits = c(0, round(max(modPlot$R2),2)),
-                       breaks = seq(0, round(max(modPlot$R2),2), 
-                                    length.out = 4)) +
-  scale_x_discrete(labels = scales::parse_format()) +
+  scale_fill_viridis_c(na.value = "transparent") +
   # make x axis readable
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    axis.text.x = element_text(angle = 55,
+                               hjust = 1),
+    # bring closer to the other plot
+    plot.margin = margin(t = 0.1, b = 5.5, l = 5.5, r = 5.5)
   )
 
 # add another heatmap for FE coefficients showing
-# rescale by the fixed effect mean to get results on the same scale
-# first get the means from each covariate
-meanFE <- as.data.frame(t(seFinFilt %>% select(c("TPsq", "Tot_P", "Tsq", "Temp", "TNsq", "TN")) %>% 
-                            summarise(across(everything(), ~ mean(., na.rm = TRUE))))) %>% rename(meanEff = "V1") %>% 
-  rownames_to_column(var = "var")
-# combine with the original data
-modReFE <- left_join(modFE, meanFE, by = "var") %>% 
-  mutate(coefResc = exp(coef * meanEff))
-
-# modReFE the factors to our desited level
-modReFE <- modReFE %>% 
+modReFE <- modFeVis %>% 
   # make names more consistent & readable
-  mutate(mod = str_replace_all(mod, "Tot_P", "TP"),
-         # do this twice bc combining too much work
-         mod = str_replace_all(mod, "Temp", "T"),
+  mutate(mod = mod %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth"),
          # and again for the variables
-         var = var %>% replace_when(
-           var == "Tot_P" ~ "TP",
-           var == "Temp" ~ "T"
-         ),
+         var = var %>% 
+           str_replace_all("Temp", "T") %>% 
+           str_replace_all("Tot_P", "TP") %>% 
+           str_replace_all("waterDepthMax", "Depth") %>% 
+           str_replace_all("waterDepthMa", "Depth"),
          isNeg = as.numeric(coef < 0)
-  )
-
-modReFE <- bind_rows(modReFE,
-                     data.frame(
-                       coef = NA,
+  ) %>%
+  # remove intercept
+  filter(var != "Intercept") %>%
+  # add null model
+  bind_rows(data.frame(coef = NA,
                        isSig = 0,
                        mod = "Null",
                        var = "TN",
@@ -570,10 +903,12 @@ modReFE <- bind_rows(modReFE,
                        isNeg = NA
                      )) %>% 
   mutate(# set factor levels to improve readability
-    mod = factor(mod, levels = modelOrderClean),
+    mod = factor(mod, 
+                 levels = modelOrderFinal,
+                 labels = modelLabelFinal),
     var = factor(var,
-                 levels = c("TPsq", "TP", "Tsq", "T", "TNsq", "TN"),
-                 labels = c("TP^2", "TP", "T^2", "T", "TN^2", "TN")))
+                 levels = c("T", "TN", "TOC", "TP", "Depth", "pH"))) 
+  
 
 # plot
 fePlot <- ggplot(data = modReFE, aes(mod, var, 
@@ -600,61 +935,280 @@ fePlot <- ggplot(data = modReFE, aes(mod, var,
   # add outline to boxes corresponding to significant coefficients
   scale_colour_manual(values = c("grey"),
                       guide = "none") +
+  scale_x_discrete(position = "top") +
   theme_bw() +
   labs(x = "",
-       y = "") +
-  theme(axis.ticks.x = element_blank(),
-        axis.text.x = element_blank()
-  ) 
+       y = "") + 
+  theme(axis.text.x = element_text(angle = -55,
+                                   hjust = 1),
+        plot.margin = margin(t = 5.5, b = 0.2, l = 5.5, r = 5.5),
+        #legend.justification = c(0.5, 0.9)
+  )
 
 modSum <- cowplot::plot_grid(fePlot, spatPlot, 
                    labels = c("a", "b"),
                    ncol = 1,
-                   rel_heights = c(0.4, 1.4),
+                   label_x = 0,
+                   label_y = c(0.46, 1.02),
+                   rel_heights = c(0.7, 1.4),
                    align = "v") 
-cowplot::save_plot("fig1.jpeg", modSum, 
+cowplot::save_plot("fig5.jpeg", modSum, 
           nrow = 2,
           dpi = 300,
-          base_height = 5)
-
-# possible extensions:
-# explore the survey effort fixed effects
-#       -our goal is to find fixed effects that give us similar bandwidths before and after site filtering
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          base_height = 5,
+          base_asp = 2.2)
+ 
 
 
 
 
 
 ########################### old stuff (not used) ###########################
-
-# spCF does not provide a dispersion parameter for quasipoisson
-# we can either do tests with base glm() function, or
-# in basis-type additive models (e.g., GAMs) dispersion is best estimated from residuals
-# Pearson's goodness-of-fit for Poisson
-pearsonGOF <- sum((nullResults$rawResid)^2 / nullResults$predRich)
-# dispersion by dividing by degrees of freedom --> not available
-# can get DHARMa to work if there's a way to get simulated residuals
-
 ### unused diagnostics
 # raw vs fitted; quasi-QQ plot
-ggplot(nullResults, aes(x = rich, y = predRich)) + geom_point() +
+ggplot(nullResults, aes(x = maxRich, y = predRich)) + geom_point() +
   geom_abline(intercept = 0, slope = 1)
 # slightly less brute QQplot
-qqplot(nullResults$rich, nullResults$predRich)
+qqplot(nullResults$maxRich, nullResults$predRich)
 # residual histogram
 ggplot(nullResults, aes(x = rawResid)) + geom_histogram()
+
+## LLM output automatic function for calculating dominance
+# roughly a measure of predictive variable importance
+# unused; verification incomplete; included only for interested readers
+
+# both general (equally averaged) and conditional (weighted based on model size)
+# non-bootstrapped (unlike in literature) and perpetuates bias in model space
+# evaluates squared effects: "incremental benefits of adding non-linearity"
+# for more, see https://psycnet.apa.org/doi/10.1037/1082-989X.8.2.129
+dominance_contributions <- function(data,
+                                    model_col = 1,
+                                    metric_col = 2,
+                                    higher_is_better = FALSE,
+                                    sep = ";",
+                                    sq_suffix = "_sq") {
+  
+  ###########  1. Standardise input  ########### 
+  dat <- data %>%
+    transmute(model = as.character(data[[model_col]]),
+              metric = as.numeric(data[[metric_col]])) %>%
+    mutate(model = str_trim(model),
+           model = if_else(is.na(model), "", model))
+  
+  ###########  2. Parse model strings into sets of terms  ########### 
+  model_terms <- dat %>%
+    mutate(
+      terms = str_split(model, fixed(sep)),
+      terms = map(terms, ~ .x[.x != ""]),
+      terms = map(terms, ~ sort(unique(.x))),
+      key = map_chr(terms, paste, collapse = sep),
+      # Number of terms in the model; model size used for conditional dominance
+      model_size = map_int(terms, length)
+    )
+  
+  # Check for duplicate specifications
+  duplicated_models <- model_terms %>%
+    count(key) %>%
+    filter(n > 1)
+  
+  if (nrow(duplicated_models) > 0) {
+    stop(
+      "Duplicate model specifications detected. ",
+      "Each unique model must occur only once."
+    )
+  }
+  
+  # Lookup table for metric values
+  lookup <- model_terms %>%
+    select(key, metric)
+  
+  ###########  3. Expand models into model/term combinations  ########### 
+  expanded <- model_terms %>%
+    select(key, terms, model_size) %>%
+    unnest_longer(terms, values_to = "term")
+  
+  ########### 4. Construct nested model by removing each term  ########### 
+  comparisons <- expanded %>%
+    mutate(
+      is_squared = str_ends(term, fixed(sq_suffix)),
+      
+      base_term = if_else(
+        is_squared,
+        str_remove(term, fixed(sq_suffix)),
+        term
+      ),
+      
+      reduced_terms = map2(
+        key,
+        term,
+        ~ {
+          current <- str_split(.x, fixed(sep))[[1]]
+          current <- current[current != ""]
+          sort(setdiff(current, .y))
+        }
+      ),
+      
+      reduced_key = map_chr(
+        reduced_terms,
+        paste,
+        collapse = sep
+      ),
+      
+      # Size of the simpler/nested model.
+      reduced_model_size = model_size - 1L
+    )
+  
+  ########### 5. Match each comparison to its nested model  ########### 
+  comparisons <- comparisons %>%
+    left_join(
+      lookup %>%
+        rename(
+          reduced_key = key,
+          metric_without = metric
+        ),
+      by = "reduced_key"
+    ) %>%
+    left_join(
+      lookup %>%
+        rename(
+          key = key,
+          metric_with = metric
+        ),
+      by = "key"
+    ) %>%
+    filter(
+      !is.na(metric_without),
+      !is.na(metric_with)
+    )
+  
+  ###########  6. Enforce hierarchical treatment of squared terms ########### 
+  #
+  # For var1_sq:
+  #
+  #   var1 + var1_sq + A
+  #             vs
+  #   var1 + A
+  #
+  # rather than:
+  #
+  #   var1 + var1_sq + A
+  #             vs
+  #   A
+  comparisons <- comparisons %>%
+    filter(
+      !is_squared |
+        map2_lgl(
+          reduced_terms,
+          base_term,
+          ~ .y %in% .x
+        )
+    )
+  
+  ###########  7. Calculate marginal improvement  ########### 
+  #
+  # For RMSE-like metrics:
+  #
+  #   improvement = metric_without - metric_with
+  #
+  # Therefore:
+  #
+  #   positive = improvement
+  #   negative = deterioration
+  comparisons <- comparisons %>%
+    mutate(
+      delta = if (higher_is_better) {
+        metric_with - metric_without
+      } else {
+        metric_without - metric_with
+      }
+    )
+  
+  ###########  8. CONDITIONAL DOMINANCE  ########### 
+  #
+  # Conditional dominance is calculated separately for every
+  # model size.
+  #
+  # model_size refers to the larger model:
+  #
+  #   A + B + C  -> model_size = 3
+  #   A + B      -> reduced size = 2
+  #
+  # Thus the contribution is "adding the variable to a model
+  # of size model_size - 1".
+  conditional <- comparisons %>%
+    group_by(term, base_term, is_squared, model_size) %>%
+    summarise(
+      n_comparisons = n(),
+      conditional_mean = mean(delta, na.rm = TRUE),
+      
+      conditional_sd = if (n() > 1) {
+        sd(delta, na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      # This is the uncertainty of the mean within the
+      # available model contexts at this model size.
+      conditional_se = if (n() > 1) {
+        sd(delta, na.rm = TRUE) / sqrt(n())
+      } else {
+        NA_real_
+      },
+      
+      .groups = "drop"
+    ) %>%
+    mutate(
+      term_type = if_else(
+        is_squared,
+        "squared/additional",
+        "linear"
+      )
+    ) %>%
+    arrange(term, model_size)
+  
+  ###########  9. GENERAL DOMINANCE  ########### 
+  #
+  # Each model size receives equal weight.
+  #
+  # G_j = mean(C_jk)
+  #
+  # where C_jk is the conditional contribution at model size k.
+  #
+  # General uncertainty is the SD of C_jk across model sizes.
+  # This is explicitly MODEL-SPACE variability, not sampling SE.
+  general <- conditional %>%
+    group_by(term, base_term, is_squared, term_type) %>%
+    summarise(
+      n_model_sizes = n(),
+      general_mean = mean(conditional_mean, na.rm = TRUE),
+      general_sd = if (n() > 1) {
+        sd(conditional_mean, na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      total_comparisons = sum(n_comparisons),
+      min_model_size = min(model_size),
+      max_model_size = max(model_size),
+      .groups = "drop") %>%
+    arrange(desc(general_mean))
+  
+  ########### 10. Return all results  ########### 
+  list(
+    # primary, equal-weighted comparison
+    general = general,
+    # slightly awkward summary where each row is a different # parameters too
+    # needs post-processing to be re-weighted into a single metric
+    conditional = conditional,
+    # more just an internal summary of the comparisons
+    comparisons = comparisons
+  )
+}
+
+# run to test with RMSE (but can re-run with MAE, for instance)
+domTest <- dominance_contributions(data = modScores %>% 
+                                     # get columns in the right order
+                                     select(c(mod, validation_RMSE)) %>% 
+                                     # format the null model approriately
+                                     mutate(mod = mod %>% str_remove_all("Null")))
+
+# general dominance is probably the only usable one in this state
+#domTest$general
